@@ -2,6 +2,13 @@
 
 PIONEER is a PyTorch framework for iterative sequence optimization through active learning and guided sequence generation.
 
+
+## Installation
+
+```bash
+pip install pioneer-nn
+```
+
 ## Core Components
 
 ### 1. Sequence Generation (`generator.py`)
