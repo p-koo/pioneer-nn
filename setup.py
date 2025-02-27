@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="pioneer",
+    name="pioneer-nn",
     version="0.0.1",
     description="An in silico framework to simulate AI-experiment cycles for iterative improvement of genomic deep learning models.",
     classifiers=[
