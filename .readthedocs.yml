@@ -15,9 +15,7 @@ python:
       requirements: null
       packages:
         - sphinx
-        - sphinx-autodoc-typehints
         - sphinx-rtd-theme
-        - myst-parser  # Try a different parser
 
 sphinx:
   configuration: docs/conf.py
