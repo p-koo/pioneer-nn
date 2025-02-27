@@ -1,4 +1,5 @@
 version: 2
+version: 2
 
 build:
   os: ubuntu-20.04
@@ -7,18 +8,7 @@ build:
 
 python:
   install:
-    - method: pip
-      path: .  # This will install your package
-    - requirements: requirements.txt  # If you have a main requirements file
-    - method: pip
-      path: .
-      extra_requirements:
-        - docs  # If you have docs extra in your setup.py/pyproject.toml
-    - method: pip
-      path: null
-      extra_requirements: null
-      requirements: null
-      packages:
-        - sphinx  # Explicitly install Sphinx
-        - sphinx_rtd_theme  # Common theme, add if needed
+    - requirements: requirements-docs.txt
 
+sphinx:
+  configuration: docs/conf.py
