@@ -1,7 +1,7 @@
 API Reference
 ============
 
-.. automodule:: pioneer-nn 
+.. automodule:: pioneer 
    :members:
    :undoc-members:
    :show-inheritance:
