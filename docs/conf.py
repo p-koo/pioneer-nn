@@ -6,6 +6,11 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import os
+import sys
+sys.path.insert(0, os.path.abspath('..'))  # or '../../' depending on your structure
+
+
 project = 'pioneer-nn'
 copyright = '2025, Peter Koo'
 author = 'Peter Koo'
@@ -19,6 +24,10 @@ extensions = [
     'sphinx.ext.napoleon',  # For Google/NumPy style docstrings
     # other extensions...
 ]
+
+# Are autodoc settings configured properly?
+autodoc_member_order = 'bysource'
+autoclass_content = 'both'  # Include both class and __init__ docstrings
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
