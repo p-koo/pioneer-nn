@@ -7,13 +7,19 @@ class Predictor:
     def predict(self, model, x, batch_size=32):
         """Generate predictions for input sequences.
         
-        Args:
-            model: PyTorch model to use for predictions
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing
+        Parameters
+        ----------
+        model : torch.nn.Module
+            PyTorch model to use for predictions
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            torch.Tensor: Model predictions
+        Returns
+        -------
+        torch.Tensor
+            Model predictions
         """
         pass
 
@@ -21,13 +27,16 @@ class Predictor:
 class Scalar(Predictor):
     """Predictor for models that output scalar values directly.
     
-    Args:
-        task_index (int, optional): Index to select from multi-task output.
-            If None, assumes single task output. Defaults to None.
+    Parameters
+    ----------
+    task_index : int, optional
+        Index to select from multi-task output.
+        If None, assumes single task output, by default None
             
-    Example:
-        >>> predictor = Scalar(task_index=0)  # Select first task
-        >>> scalar_preds = predictor.predict(model, sequences)
+    Examples
+    --------
+    >>> predictor = Scalar(task_index=0)  # Select first task
+    >>> scalar_preds = predictor.predict(model, sequences)
     """
     def __init__(self, task_index=None):
         self.task_index = task_index
