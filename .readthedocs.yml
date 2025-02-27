@@ -3,6 +3,8 @@ version: 2
 build:
   os: ubuntu-20.04
   image: latest
+  commands:
+    - sphinx-build -b html docs docs/_build/html
 
 python:
   version: 3.8
