@@ -23,7 +23,7 @@ class Acquisition:
         pass
 
 
-class Random(Acquisition):
+class RandomAcquisition(Acquisition):
     """Acquisition that randomly samples sequences from input.
     
     Parameters
@@ -61,7 +61,7 @@ class Random(Acquisition):
         return x[idx], idx
 
 
-class Uncertainty(Acquisition):
+class UncertaintyAcquisition(Acquisition):
     """Acquisition that selects sequences with highest uncertainty scores.
     
     Parameters
@@ -105,7 +105,7 @@ class Uncertainty(Acquisition):
         return x[idx], idx
     
 
-class LCMD(Acquisition):
+class LCMDAcquisition(Acquisition):
 
     def __init__(self):
         super().__init__()
