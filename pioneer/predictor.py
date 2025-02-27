@@ -1,7 +1,3 @@
-import torch
-from torch.utils.data import DataLoader, TensorDataset
-
-
 class Predictor:
     """Abstract base class for prediction methods.
     
@@ -22,13 +18,20 @@ class Predictor:
         pass
 
 
-class ScalarPredictor(Predictor):
+class Scalar(Predictor):
     """Predictor for models that output scalar values directly.
     
+    Args:
+        task_index (int, optional): Index to select from multi-task output.
+            If None, assumes single task output. Defaults to None.
+            
     Example:
-        >>> predictor = ScalarPredictor()
+        >>> predictor = Scalar(task_index=0)  # Select first task
         >>> scalar_preds = predictor.predict(model, sequences)
     """
+    def __init__(self, task_index=None):
+        self.task_index = task_index
+
     def predict(self, model, x, batch_size=32):
         """Generate scalar predictions.
         
@@ -38,42 +41,7 @@ class ScalarPredictor(Predictor):
             batch_size (int, optional): Batch size for processing. Defaults to 32.
             
         Returns:
-            torch.Tensor: Scalar predictions of shape (N,)
-        """
-        model.eval()
-        loader = DataLoader(TensorDataset(x), batch_size=batch_size)
-        predictions = []
-        
-        with torch.no_grad():
-            for batch in loader:
-                predictions.append(model(batch[0]))
-                
-        return torch.cat(predictions, dim=0)
-
-
-class ProfilePredictor(Predictor):
-    """Predictor for models that output profiles, with reduction to scalar values.
-    
-    Args:
-        reduction (callable): Function to reduce profiles to scalar values
-        
-    Example:
-        >>> predictor = ProfilePredictor(reduction=profile_sum)
-        >>> scalar_preds = predictor.predict(model, sequences)
-    """
-    def __init__(self, reduction):
-        self.reduction = reduction
-        
-    def predict(self, model, x, batch_size=32):
-        """Generate predictions and reduce profiles to scalars.
-        
-        Args:
-            model: PyTorch model that outputs profile predictions
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
-            
-        Returns:
-            torch.Tensor: Scalar predictions of shape (N,)
+            torch.Tensor: Scalar predictions of shape (N,) or (N, T) for T tasks
         """
         model.eval()
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)
@@ -82,52 +50,62 @@ class ProfilePredictor(Predictor):
         with torch.no_grad():
             for batch in loader:
                 pred = model(batch[0])
-                predictions.append(self.reduction(pred))
+                # Handle multi-task output if task_index specified
+                if self.task_index is not None:
+                    pred = pred[:, self.task_index]
+                predictions.append(pred)
                 
         return torch.cat(predictions, dim=0)
 
 
-def profile_sum(pred):
-    """Reduce profile predictions to scalars using summation.
+class Profile(Predictor):
+    """Predictor for models that output profiles, with reduction to scalar values.
     
     Args:
-        pred (torch.Tensor): Profile predictions of shape (N, P) where:
-            N is batch size
-            P is profile length
+        reduction (callable): Function to reduce profiles to scalar values
+        task_index (int, optional): Index to select from multi-task output.
+            If None, assumes single task output. Defaults to None.
             
-    Returns:
-        torch.Tensor: Summed predictions of shape (N,)
+    Example:
+        >>> predictor = Profile(reduction=profile_sum, task_index=1)
+        >>> scalar_preds = predictor.predict(model, sequences)
     """
-    return torch.sum(pred, dim=1)
-
-
-def profile_pca(pred):
-    """Reduce profile predictions to scalars using PCA.
-    
-    Args:
-        pred (torch.Tensor): Profile predictions of shape (N, P) where:
-            N is batch size
-            P is profile length
-            
-    Returns:
-        torch.Tensor: First principal component of shape (N,)
-    """
-    # Reshape if needed
-    if pred.dim() > 2:
-        pred = pred.reshape(pred.shape[0], -1)
-    
-    # Center the data
-    mean = torch.mean(pred, dim=0)
-    centered = pred - mean
-    
-    # Compute first principal component
-    U, S, V = torch.svd(centered.T)
-    projection = centered @ U[:, 0]
-    
-    # Correct sign based on correlation with sum
-    sums = torch.sum(pred, dim=1)
-    if torch.corrcoef(torch.stack([sums, projection]))[0, 1] < 0:
-        projection = -projection
+    def __init__(self, reduction, task_index=None):
+        self.reduction = reduction
+        self.task_index = task_index
         
-    return projection
-
+    def predict(self, model, x, batch_size=32):
+        """Generate predictions and reduce profiles to scalars.
+        
+        Args:
+            model: PyTorch model that outputs profile predictions
+            x (torch.Tensor): Input sequences of shape (N, A, L) where:
+                N is batch size
+                A is alphabet size
+                L is sequence length
+            batch_size (int, optional): Batch size for processing. Defaults to 32.
+            
+        Returns:
+            torch.Tensor: Scalar predictions of shape (N,) or (N, T) where:
+                N is batch size
+                T is number of tasks (if multi-task)
+        """
+        model.eval()
+        loader = DataLoader(TensorDataset(x), batch_size=batch_size)
+        predictions = []
+        
+        with torch.no_grad():
+            for batch in loader:
+                # Model output shape: (N, T, L) where T is number of tasks
+                pred = model(batch[0])
+                
+                # Handle multi-task output if task_index specified
+                if self.task_index is not None:
+                    # Select specific task: (N, L)
+                    pred = pred[:, self.task_index]
+                
+                # Apply reduction to get scalar per sequence
+                predictions.append(self.reduction(pred))
+                
+        return torch.cat(predictions, dim=0)
+    

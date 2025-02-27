@@ -2,7 +2,6 @@ import torch
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, TensorDataset
 
-
 class PIONEER:
     """Framework for active learning with sequence generation.
     
@@ -28,13 +27,13 @@ class PIONEER:
         self.model = model
         self.oracle = oracle
         self.generator = generator
-        self.selector = selector
+        self.acquisition = acquisition
         self.trainer = trainer
         self.batch_size = batch_size
         # Store initial model state
         self.initial_state = {k: v.clone() for k, v in model.state_dict().items()}
 
-    def train_model(self, x, y, val_x=None, val_y=None, reinitialize=True):
+    def train_model(self, x, y, val_x=None, val_y=None):
         """Train surrogate model on data.
         
         Args:
@@ -43,11 +42,9 @@ class PIONEER:
             val_x (torch.Tensor, optional): Validation sequences
             val_y (torch.Tensor, optional): Validation labels
         """
-        # reinitialize model
-        if reinitialize:
-            # Reset model weights
-            self.model.load_state_dict(self.initial_state)
-            
+        # Reset model weights
+        self.model.load_state_dict(self.initial_state)
+        
         # Reset trainer state
         self.trainer.fit_loop.epoch_progress.reset()
         self.trainer.fit_loop.epoch_loop.reset()
@@ -80,7 +77,7 @@ class PIONEER:
         Returns:
             torch.Tensor: Selected sequences of shape (M, A, L)
         """
-        return self.selector.select(x)
+        return self.acquisition.select(x)
 
     def get_oracle_labels(self, x):
         """Get ground truth labels from oracle.
@@ -111,11 +108,14 @@ class PIONEER:
         selected_y = self.get_oracle_labels(selected_x)
         return selected_x, selected_y
 
-    def _get_dataloader(self, x, y, shuffle=True):
+    def _get_dataloader(self, x, y):
         """Create DataLoader from tensors."""
+        if x is None or y is None:
+            return None
         dataset = TensorDataset(x, y)
-        return DataLoader(dataset, batch_size=self.batch_size, shuffle=shuffle)
-        
+        return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
+    
+
     def save_weights(model, path, cycle=None):
         """Save model weights to file.
         

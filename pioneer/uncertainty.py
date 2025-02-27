@@ -94,3 +94,5 @@ class DeepEnsemble(UncertaintyMethod):
                 uncertainties.append(torch.std(preds, dim=0))
                 
         return torch.cat(uncertainties, dim=0)
+    
+
