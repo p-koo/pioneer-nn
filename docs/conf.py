@@ -1,41 +1,27 @@
-# Configuration file for the Sphinx documentation builder.
-#
-# For the full list of built-in configuration values, see the documentation:
-# https://www.sphinx-doc.org/en/master/usage/configuration.html
-
-# -- Project information -----------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
+# docs/conf.py
 
 import os
 import sys
-sys.path.insert(0, os.path.abspath('..'))  # or '../../' depending on your structure
+# Add the project root to sys.path if needed:
+sys.path.insert(0, os.path.abspath('..'))
 
+# -- Project information -----------------------------------------------------
 
 project = 'pioneer-nn'
-copyright = '2025, Peter Koo'
-author = 'Peter Koo'
-release = '0.0.1'
+author = 'Your Name'
+release = '0.1.0'  # The full version, including alpha/beta/rc tags
 
 # -- General configuration ---------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',  # For Google/NumPy style docstrings
-    # other extensions...
+    'sphinx.ext.autodoc',    # Automatically generate documentation from docstrings
+    'sphinx.ext.napoleon',   # Support for NumPy and Google style docstrings
 ]
 
-# Are autodoc settings configured properly?
-autodoc_member_order = 'bysource'
-autoclass_content = 'both'  # Include both class and __init__ docstrings
-
 templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
-
+exclude_patterns = []
 
 # -- Options for HTML output -------------------------------------------------
-# https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'alabaster'
 html_static_path = ['_static']
