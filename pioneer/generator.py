@@ -10,14 +10,18 @@ class Generator:
     def generate(self, x):
         """Generate modified sequences from input sequences.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
                 
-        Returns:
-            torch.Tensor: Modified sequences with same shape as input
+        Returns
+        -------
+        torch.Tensor
+            Modified sequences with same shape as input
         """
         pass
 
@@ -25,14 +29,17 @@ class Generator:
 class Random(Generator):
     """Generator that creates random sequences based on nucleotide probabilities.
     
-    Args:
-        prob (list[float], optional): Probabilities for each nucleotide. 
-            Defaults to uniform [0.25, 0.25, 0.25, 0.25].
-        seed (int, optional): Random seed for reproducibility. Defaults to None.
+    Parameters
+    ----------
+    prob : list[float], optional
+        Probabilities for each nucleotide, by default [0.25, 0.25, 0.25, 0.25]
+    seed : int, optional
+        Random seed for reproducibility, by default None
         
-    Example:
-        >>> gen = Random(prob=[0.3, 0.2, 0.2, 0.3])
-        >>> random_seqs = gen.generate(sequences)
+    Examples
+    --------
+    >>> gen = Random(prob=[0.3, 0.2, 0.2, 0.3])
+    >>> random_seqs = gen.generate(sequences)
     """
     def __init__(self, prob=None, seed=None):
         # Set nucleotide probabilities (default to uniform)
@@ -47,11 +54,15 @@ class Random(Generator):
     def generate(self, x):
         """Generate random sequences using specified probabilities.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L)
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
             
-        Returns:
-            torch.Tensor: Random sequences with same shape as input
+        Returns
+        -------
+        torch.Tensor
+            Random sequences with same shape as input
         """
         N, A, L = x.shape
         return torch.multinomial(self.prob, N * L, replacement=True).view(N, A, L)
@@ -60,15 +71,20 @@ class Random(Generator):
 class Mutagenesis(Generator):
     """Generator that randomly mutates sequences within a specified window.
     
-    Args:
-        mut_rate (float): Mutation rate between 0 and 1
-        mut_window (tuple[int, int], optional): Start and end positions for mutation window.
-            Defaults to None (entire sequence).
-        seed (int, optional): Random seed for reproducibility. Defaults to None.
+    Parameters
+    ----------
+    mut_rate : float
+        Mutation rate between 0 and 1
+    mut_window : tuple[int, int], optional
+        Start and end positions for mutation window.
+        If None, mutates entire sequence, by default None
+    seed : int, optional
+        Random seed for reproducibility, by default None
             
-    Example:
-        >>> gen = Mutagenesis(mut_rate=0.1, mut_window=(10, 20))
-        >>> mutated = gen.generate(sequences)
+    Examples
+    --------
+    >>> gen = Mutagenesis(mut_rate=0.1, mut_window=(10, 20))
+    >>> mutated = gen.generate(sequences)
     """
     def __init__(self, mut_rate=0.1, mut_window=None, seed=None):
         assert 0 <= mut_rate <= 1
@@ -80,11 +96,15 @@ class Mutagenesis(Generator):
     def generate(self, x):
         """Generate mutated sequences based on mutation rate.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L)
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
             
-        Returns:
-            torch.Tensor: Mutated sequences with same shape as input
+        Returns
+        -------
+        torch.Tensor
+            Mutated sequences with same shape as input
         """
         N, A, L = x.shape
 
@@ -111,18 +131,25 @@ class Mutagenesis(Generator):
 class GuidedMutagenesis(Generator):
     """Generator that uses attribution scores to guide mutations.
     
-    Args:
-        attr_method (callable): Method that returns attribution scores for sequences
-        mut_rate (float): Mutation rate between 0 and 1
-        mut_window (tuple[int, int], optional): Start and end positions for mutation window.
-            Defaults to None (entire sequence).
-        temp (float or str, optional): Temperature for softmax. Use 'neg_inf' for deterministic
-            selection or positive float for sampling. Defaults to -1.
-        seed (int, optional): Random seed for reproducibility. Defaults to None.
+    Parameters
+    ----------
+    attr_method : callable
+        Method that returns attribution scores for sequences
+    mut_rate : float
+        Mutation rate between 0 and 1
+    mut_window : tuple[int, int], optional
+        Start and end positions for mutation window.
+        If None, mutates entire sequence, by default None
+    temp : float or str, optional
+        Temperature for softmax. Use 'neg_inf' for deterministic
+        selection or positive float for sampling, by default -1
+    seed : int, optional
+        Random seed for reproducibility, by default None
             
-    Example:
-        >>> gen = GuidedMutagenesis(attr_method, mut_rate=0.1, temp=1.0)
-        >>> guided_mutations = gen.generate(sequences)
+    Examples
+    --------
+    >>> gen = GuidedMutagenesis(attr_method, mut_rate=0.1, temp=1.0)
+    >>> guided_mutations = gen.generate(sequences)
     """
     def __init__(self, attr_method, mut_rate=0.1, mut_window=None, temp=-1, seed=None):
         assert 0 <= mut_rate <= 1
@@ -136,13 +163,17 @@ class GuidedMutagenesis(Generator):
     def generate(self, x, batch_size=512):
         """Generate mutations guided by attribution scores.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing large inputs.
-                Defaults to 32.
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing large inputs, by default 512
                 
-        Returns:
-            torch.Tensor: Mutated sequences with same shape as input
+        Returns
+        -------
+        torch.Tensor
+            Mutated sequences with same shape as input
         """
 
         # Get shape parameters

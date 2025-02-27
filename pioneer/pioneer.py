@@ -5,25 +5,33 @@ from torch.utils.data import DataLoader, TensorDataset
 class PIONEER:
     """Framework for active learning with sequence generation.
     
-    Args:
-        model: ModelWrapper instance for predictions and uncertainty
-        oracle: Oracle instance for ground truth labels
-        generator: Generator instance for sequence proposals
-        selector: Selector instance for sequence selection
-        trainer: PyTorch Lightning Trainer for model training
-        batch_size (int, optional): Batch size for dataloaders. Defaults to 32.
+    Parameters
+    ----------
+    model : ModelWrapper
+        ModelWrapper instance for predictions and uncertainty
+    oracle : Oracle
+        Oracle instance for ground truth labels
+    generator : Generator
+        Generator instance for sequence proposals
+    acquisition : Acquisition
+        Acquisition instance for sequence selection
+    trainer : pl.Trainer
+        PyTorch Lightning Trainer for model training
+    batch_size : int, optional
+        Batch size for dataloaders, by default 32
         
-    Example:
-        >>> trainer = pl.Trainer(max_epochs=100)
-        >>> pioneer = PIONEER(
-        ...     model=ModelWrapper(...),
-        ...     oracle=SingleOracle(...),
-        ...     generator=MutationGenerator(mut_rate=0.1),
-        ...     selector=UncertaintySelector(n_select=1000),
-        ...     trainer=trainer
-        ... )
+    Examples
+    --------
+    >>> trainer = pl.Trainer(max_epochs=100)
+    >>> pioneer = PIONEER(
+    ...     model=ModelWrapper(...),
+    ...     oracle=SingleOracle(...),
+    ...     generator=MutationGenerator(mut_rate=0.1),
+    ...     acquisition=UncertaintySelector(n_select=1000),
+    ...     trainer=trainer
+    ... )
     """
-    def __init__(self, model, oracle, generator, selector, trainer, batch_size=32):
+    def __init__(self, model, oracle, generator, acquisition, trainer, batch_size=32):
         self.model = model
         self.oracle = oracle
         self.generator = generator
@@ -36,11 +44,16 @@ class PIONEER:
     def train_model(self, x, y, val_x=None, val_y=None):
         """Train surrogate model on data.
         
-        Args:
-            x (torch.Tensor): Training sequences of shape (N, A, L)
-            y (torch.Tensor): Training labels of shape (N,)
-            val_x (torch.Tensor, optional): Validation sequences
-            val_y (torch.Tensor, optional): Validation labels
+        Parameters
+        ----------
+        x : torch.Tensor
+            Training sequences of shape (N, A, L)
+        y : torch.Tensor
+            Training labels of shape (N,)
+        val_x : torch.Tensor, optional
+            Validation sequences, by default None
+        val_y : torch.Tensor, optional
+            Validation labels, by default None
         """
         # Reset model weights
         self.model.load_state_dict(self.initial_state)
@@ -60,47 +73,68 @@ class PIONEER:
     def generate_sequences(self, x):
         """Generate new sequence proposals.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L)
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
                 
-        Returns:
-            torch.Tensor: Generated sequences of shape (M, A, L)
+        Returns
+        -------
+        torch.Tensor
+            Generated sequences of shape (M, A, L)
         """
         return self.generator.generate(x)
 
     def select_sequences(self, x):
         """Select promising sequences.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L)
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
                 
-        Returns:
-            torch.Tensor: Selected sequences of shape (M, A, L)
+        Returns
+        -------
+        torch.Tensor
+            Selected sequences of shape (M, A, L)
         """
         return self.acquisition.select(x)
 
     def get_oracle_labels(self, x):
         """Get ground truth labels from oracle.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L)
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
                 
-        Returns:
-            torch.Tensor: Oracle labels of shape (N,)
+        Returns
+        -------
+        torch.Tensor
+            Oracle labels of shape (N,)
         """
         return self.oracle.predict(x, self.batch_size)
 
     def run_cycle(self, x, y, val_x=None, val_y=None):
         """Run complete active learning cycle.
         
-        Args:
-            x (torch.Tensor): Training sequences of shape (N, A, L)
-            y (torch.Tensor): Training labels of shape (N,)
-            val_x (torch.Tensor, optional): Validation sequences
-            val_y (torch.Tensor, optional): Validation labels
+        Parameters
+        ----------
+        x : torch.Tensor
+            Training sequences of shape (N, A, L)
+        y : torch.Tensor
+            Training labels of shape (N,)
+        val_x : torch.Tensor, optional
+            Validation sequences, by default None
+        val_y : torch.Tensor, optional
+            Validation labels, by default None
                 
-        Returns:
-            tuple: (new_sequences, new_labels) of shapes ((M, A, L), (M,))
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Tuple containing:
+            - Selected sequences of shape (M, A, L)
+            - Their labels of shape (M,)
         """
         self.train_model(x, y, val_x, val_y)
         generated_x = self.generate_sequences(x)
@@ -116,13 +150,18 @@ class PIONEER:
         return DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
     
 
+    @staticmethod
     def save_weights(model, path, cycle=None):
         """Save model weights to file.
         
-        Args:
-            model: ModelWrapper instance to save
-            path (str): Path to save weights
-            cycle (int, optional): Current cycle number to append to filename
+        Parameters
+        ----------
+        model : ModelWrapper
+            ModelWrapper instance to save
+        path : str
+            Path to save weights
+        cycle : int, optional
+            Current cycle number to append to filename, by default None
         """
         if cycle is not None:
             path = path.replace('.pt', f'_cycle{cycle}.pt')

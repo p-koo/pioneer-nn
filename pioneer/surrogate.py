@@ -3,17 +3,22 @@ import torch
 class ModelWrapper:
     """Model wrapper for predictions and uncertainty estimation.
     
-    Args:
-        model: Model or list of models
-        predictor: Prediction method
-        uncertainty_method: Uncertainty estimation method
+    Parameters
+    ----------
+    model : torch.nn.Module or list[torch.nn.Module]
+        Model or list of models for ensemble
+    predictor : Predictor
+        Prediction method for generating outputs
+    uncertainty_method : UncertaintyMethod, optional
+        Method for estimating prediction uncertainty, by default None
         
-    Example:
-        >>> model = ModelWrapper(
-        ...     model=MyModel(),
-        ...     predictor=ScalarPredictor(),
-        ...     uncertainty_method=MCDropout()
-        ... )
+    Examples
+    --------
+    >>> model = ModelWrapper(
+    ...     model=MyModel(),
+    ...     predictor=ScalarPredictor(),
+    ...     uncertainty_method=MCDropout()
+    ... )
     """
     def __init__(self, model, predictor, uncertainty_method=None):
         self.model = model
@@ -23,11 +28,16 @@ class ModelWrapper:
     def predict(self, x, batch_size=32):
         """Generate predictions for input sequences.
         
-        Args:
-            x: Input sequences
-            batch_size: Batch size for processing
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
+        Returns
+        -------
+        torch.Tensor
             Model predictions
         """
         if isinstance(self.model, list):
@@ -38,12 +48,22 @@ class ModelWrapper:
     def uncertainty(self, x, batch_size=32):
         """Generate uncertainty estimates.
         
-        Args:
-            x: Input sequences
-            batch_size: Batch size for processing
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            Uncertainty scores
+        Returns
+        -------
+        torch.Tensor
+            Uncertainty scores of shape (N,)
+            
+        Raises
+        ------
+        ValueError
+            If no uncertainty method was specified during initialization
         """
         if self.uncertainty_method is None:
             raise ValueError("No uncertainty method specified")

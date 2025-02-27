@@ -11,15 +11,20 @@ class Oracle:
     def predict(self, x, batch_size=32):
         """Generate ground truth labels for input sequences.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+        batch_size : int, optional
+            Batch size for processing, by default 32
                 
-        Returns:
-            torch.Tensor: Ground truth labels of shape (N,)
+        Returns
+        -------
+        torch.Tensor
+            Ground truth labels of shape (N,)
         """
         raise NotImplementedError
 
@@ -27,18 +32,24 @@ class Oracle:
 class SingleOracle(Oracle):
     """Oracle that uses a single pre-trained model for inference.
     
-    Args:
-        model_class: PyTorch model class to instantiate
-        model_kwargs (dict): Arguments to initialize the model
-        weight_path (str): Path to model weights file
-        device (str, optional): Device to run model on ('cuda' or 'cpu'). 
-            Defaults to 'cuda' if available.
+    Parameters
+    ----------
+    model_class : type
+        PyTorch model class to instantiate
+    model_kwargs : dict
+        Arguments to initialize the model
+    weight_path : str
+        Path to model weights file
+    device : str, optional
+        Device to run model on ('cuda' or 'cpu').
+        Defaults to 'cuda' if available, by default None
             
-    Example:
-        >>> model_class = MyModel
-        >>> model_kwargs = {'hidden_dim': 256}
-        >>> oracle = SingleOracle(model_class, model_kwargs, 'weights.pt')
-        >>> labels = oracle.predict(sequences)
+    Examples
+    --------
+    >>> model_class = MyModel
+    >>> model_kwargs = {'hidden_dim': 256}
+    >>> oracle = SingleOracle(model_class, model_kwargs, 'weights.pt')
+    >>> labels = oracle.predict(sequences)
     """
     def __init__(self, model_class, model_kwargs, weight_path, device=None):
         # Set device (default to GPU if available)
@@ -53,15 +64,17 @@ class SingleOracle(Oracle):
     def predict(self, x, batch_size=32):
         """Generate predictions using batched inference.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
                 
-        Returns:
-            torch.Tensor: Model predictions of shape (N,)
+        Returns
+        -------
+        torch.Tensor
+            Model predictions of shape (N,)
         """
         # Process sequences in batches
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)
@@ -80,19 +93,25 @@ class SingleOracle(Oracle):
 class EnsembleOracle(Oracle):
     """Oracle that uses an ensemble of pre-trained models.
     
-    Args:
-        model_class: PyTorch model class to instantiate
-        model_kwargs (dict): Arguments to initialize each model
-        weight_paths (list[str]): Paths to model weight files
-        device (str, optional): Device to run models on ('cuda' or 'cpu').
-            Defaults to 'cuda' if available.
+    Parameters
+    ----------
+    model_class : type
+        PyTorch model class to instantiate
+    model_kwargs : dict
+        Arguments to initialize each model
+    weight_paths : list[str]
+        Paths to model weight files
+    device : str, optional
+        Device to run models on ('cuda' or 'cpu').
+        Defaults to 'cuda' if available, by default None
             
-    Example:
-        >>> model_class = MyModel
-        >>> model_kwargs = {'hidden_dim': 256}
-        >>> weight_paths = ['model1.pt', 'model2.pt', 'model3.pt']
-        >>> oracle = EnsembleOracle(model_class, model_kwargs, weight_paths)
-        >>> labels = oracle.predict(sequences)
+    Examples
+    --------
+    >>> model_class = MyModel
+    >>> model_kwargs = {'hidden_dim': 256}
+    >>> weight_paths = ['model1.pt', 'model2.pt', 'model3.pt']
+    >>> oracle = EnsembleOracle(model_class, model_kwargs, weight_paths)
+    >>> labels = oracle.predict(sequences)
     """
     def __init__(self, model_class, model_kwargs, weight_paths, device=None):
         # Set device (default to GPU if available)
@@ -110,15 +129,17 @@ class EnsembleOracle(Oracle):
     def predict(self, x, batch_size=32):
         """Generate ensemble predictions using batched inference.
         
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
                 
-        Returns:
-            torch.Tensor: Mean predictions across ensemble of shape (N,)
+        Returns
+        -------
+        torch.Tensor
+            Mean predictions across ensemble of shape (N,)
         """
         # Process sequences in batches
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)

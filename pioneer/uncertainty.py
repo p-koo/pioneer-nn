@@ -11,13 +11,19 @@ class UncertaintyMethod:
     def estimate(self, model, x, batch_size=32):
         """Generate uncertainty estimates for input sequences.
         
-        Args:
-            model: PyTorch model or list of models
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing
+        Parameters
+        ----------
+        model : torch.nn.Module or list[torch.nn.Module]
+            PyTorch model or list of models
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            torch.Tensor: Uncertainty scores for each sequence
+        Returns
+        -------
+        torch.Tensor
+            Uncertainty scores of shape (N,)
         """
         pass
 
@@ -25,13 +31,15 @@ class UncertaintyMethod:
 class MCDropout(UncertaintyMethod):
     """Uncertainty estimation using Monte Carlo Dropout.
     
-    Args:
-        n_samples (int, optional): Number of forward passes with dropout.
-            Defaults to 20.
+    Parameters
+    ----------
+    n_samples : int, optional
+        Number of forward passes with dropout, by default 20
             
-    Example:
-        >>> uncertainty = MCDropout(n_samples=20)
-        >>> scores = uncertainty.estimate(model, sequences)
+    Examples
+    --------
+    >>> uncertainty = MCDropout(n_samples=20)
+    >>> scores = uncertainty.estimate(model, sequences)
     """
     def __init__(self, n_samples=20):
         self.n_samples = n_samples
@@ -39,13 +47,19 @@ class MCDropout(UncertaintyMethod):
     def estimate(self, model, x, batch_size=32):
         """Generate uncertainty estimates using MC Dropout.
         
-        Args:
-            model: PyTorch model with dropout layers
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        model : torch.nn.Module
+            PyTorch model with dropout layers
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            torch.Tensor: Uncertainty scores of shape (N,)
+        Returns
+        -------
+        torch.Tensor
+            Uncertainty scores of shape (N,)
         """
         model.train()  # Enable dropout
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)
@@ -65,21 +79,28 @@ class MCDropout(UncertaintyMethod):
 class DeepEnsemble(UncertaintyMethod):
     """Uncertainty estimation using Deep Ensembles.
     
-    Example:
-        >>> models = [model1, model2, model3]
-        >>> uncertainty = DeepEnsemble()
-        >>> scores = uncertainty.estimate(models, sequences)
+    Examples
+    --------
+    >>> models = [model1, model2, model3]
+    >>> uncertainty = DeepEnsemble()
+    >>> scores = uncertainty.estimate(models, sequences)
     """
     def estimate(self, models, x, batch_size=32):
         """Generate uncertainty estimates using model ensemble.
         
-        Args:
-            models (list): List of PyTorch models
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        models : list[torch.nn.Module]
+            List of PyTorch models
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            torch.Tensor: Uncertainty scores of shape (N,)
+        Returns
+        -------
+        torch.Tensor
+            Uncertainty scores of shape (N,)
         """
         [model.eval() for model in models]
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)

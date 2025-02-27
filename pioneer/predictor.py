@@ -44,13 +44,19 @@ class Scalar(Predictor):
     def predict(self, model, x, batch_size=32):
         """Generate scalar predictions.
         
-        Args:
-            model: PyTorch model that outputs scalar values
-            x (torch.Tensor): Input sequences of shape (N, A, L)
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        model : torch.nn.Module
+            PyTorch model that outputs scalar values
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            torch.Tensor: Scalar predictions of shape (N,) or (N, T) for T tasks
+        Returns
+        -------
+        torch.Tensor
+            Scalar predictions of shape (N,) or (N, T) for T tasks
         """
         model.eval()
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)
@@ -70,14 +76,18 @@ class Scalar(Predictor):
 class Profile(Predictor):
     """Predictor for models that output profiles, with reduction to scalar values.
     
-    Args:
-        reduction (callable): Function to reduce profiles to scalar values
-        task_index (int, optional): Index to select from multi-task output.
-            If None, assumes single task output. Defaults to None.
+    Parameters
+    ----------
+    reduction : callable
+        Function to reduce profiles to scalar values
+    task_index : int, optional
+        Index to select from multi-task output.
+        If None, assumes single task output, by default None
             
-    Example:
-        >>> predictor = Profile(reduction=profile_sum, task_index=1)
-        >>> scalar_preds = predictor.predict(model, sequences)
+    Examples
+    --------
+    >>> predictor = Profile(reduction=profile_sum, task_index=1)
+    >>> scalar_preds = predictor.predict(model, sequences)
     """
     def __init__(self, reduction, task_index=None):
         self.reduction = reduction
@@ -86,18 +96,24 @@ class Profile(Predictor):
     def predict(self, model, x, batch_size=32):
         """Generate predictions and reduce profiles to scalars.
         
-        Args:
-            model: PyTorch model that outputs profile predictions
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
-            batch_size (int, optional): Batch size for processing. Defaults to 32.
+        Parameters
+        ----------
+        model : torch.nn.Module
+            PyTorch model that outputs profile predictions
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+        batch_size : int, optional
+            Batch size for processing, by default 32
             
-        Returns:
-            torch.Tensor: Scalar predictions of shape (N,) or (N, T) where:
-                N is batch size
-                T is number of tasks (if multi-task)
+        Returns
+        -------
+        torch.Tensor
+            Scalar predictions of shape (N,) or (N, T) where:
+            N is batch size,
+            T is number of tasks (if multi-task)
         """
         model.eval()
         loader = DataLoader(TensorDataset(x), batch_size=batch_size)
