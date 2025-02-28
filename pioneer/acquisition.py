@@ -1,5 +1,8 @@
 import torch
 
+from bmdal_reg.bmdal.feature_data import TensorFeatureData
+from bmdal_reg.bmdal.algorithms import select_batch
+
 
 class Acquisition:
     """Abstract base class for sequence acquisition.
@@ -105,13 +108,71 @@ class UncertaintyAcquisition(Acquisition):
         return x[idx], idx
     
 
+
 class LCMDAcquisition(Acquisition):
+    """Acquisition that selects sequences using LCMD (Linear Centered Maximum Distance) method.
+    
+    Parameters
+    ----------
+    target_size : int
+        Number of sequences to select
+    models : list
+        List of models for LCMD selection
+    x_train : torch.Tensor
+        Training data used for selection
+    y_train : torch.Tensor
+        Training labels used for selection
+    device : str, optional
+        Device to use for computations, by default 'cuda'
+    batch_size : int, optional
+        Batch size for computations, by default 100
+    base_kernel : str, optional
+        Kernel type for selection, by default 'grad'
+    kernel_transforms : list, optional
+        List of kernel transformations, by default [('rp', [512])]
+    sel_with_train : bool, optional
+        Whether to include training data in selection, by default False
+        
+    Examples
+    --------
+    >>> acq = LCMDAcquisition(target_size=32, models=models, x_train=x_train, y_train=y_train)
+    >>> selected_seqs, indices = acq.select(sequences)
+    """
+    def __init__(self, target_size, models, x_train, y_train, device='cuda', 
+                 batch_size=100, base_kernel='grad', 
+                 kernel_transforms=[('rp', [512])], sel_with_train=False):
+        self.target_size = target_size
+        self.models = models
+        self.x_train = x_train
+        self.y_train = y_train
+        self.device = device
+        self.batch_size = batch_size
+        self.base_kernel = base_kernel
+        self.kernel_transforms = kernel_transforms
+        self.sel_with_train = sel_with_train
 
-    def __init__(self):
-        super().__init__()
+    def select(self, x):
+        """Select sequences using LCMD method.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L)
+            
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Selected sequences and their indices
+        """
+        precomp_batch_size=self.external_batch_size #QUIQUINEW NOT USED!!!
+        nn_batch_size=self.external_batch_size #QUIQUINEW NOT USED!!!
 
-    def select(x, batch_size):
+        train_data = TensorFeatureData(torch.tensor(self.x_train))
+        pool_data = TensorFeatureData(torch.tensor(x_pool))
 
-        return x[idx], idx
 
-
+        idx, _ = select_batch(batch_size=self.n_to_get, models=self.models, 
+                                data={'train': train_data, 'pool': pool_data}, y_train=self.y_train,
+                                selection_method=self.selection_method, sel_with_train=self.sel_with_train,
+                                base_kernel=self.base_kernel, kernel_transforms=self.kernel_transforms) # return batch_idxs, results_dict : def select within class BatchSelectorImpl in algorithms.py
+        return(idx)
