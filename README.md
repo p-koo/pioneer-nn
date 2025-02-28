@@ -137,7 +137,7 @@ pred = predictor.Profile(
 ```bibtex
 @article{pioneer2024,
   title={PIONEER: An in silico playground for iterative improvement of genomic deep learning},
-  author={A Crjnar, J Desmarais, JB Kinney, PK Koo},
+  author={A Crnjar, J Desmarais, JB Kinney, PK Koo},
   journal={bioRxiv},
   year={2024}
 }
