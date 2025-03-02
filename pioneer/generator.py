@@ -47,8 +47,9 @@ class Random(Generator):
         if prob is None:
             self.prob = torch.tensor([0.25] * 4)
         else:
-            assert len(prob) == 4 and abs(sum(prob) - 1.0) < 1e-6
-            self.prob = torch.tensor(prob)
+            prob = torch.tensor(prob)
+            assert prob.size(0) == 4 and torch.abs(torch.sum(prob) - 1.0) < 1e-6
+            self.prob = prob
         if seed is not None:
             torch.manual_seed(seed)
 
@@ -194,7 +195,7 @@ class GuidedMutagenesis(Generator):
             start = 0 if self.mut_window is None else self.mut_window[0]
             end = L if self.mut_window is None else self.mut_window[1]
             window_size = end - start
-            n_mutations = int(window_size * self.mut_rate)
+            n_mutations = torch.floor(torch.tensor(window_size * self.mut_rate)).long()
             
             # Clone input for mutations
             batch_mut = batch_x.clone()
@@ -211,8 +212,8 @@ class GuidedMutagenesis(Generator):
                 
                 # Zero out current nucleotide scores and previously mutated positions
                 current_nt_mask = batch_mut[:, :, start:end].bool()
-                attr_map[current_nt_mask] = float('-inf')
-                attr_map[:, :, mutated_positions] = float('-inf')
+                attr_map[current_nt_mask] = torch.tensor(float('-inf'))
+                attr_map[:, :, mutated_positions] = torch.tensor(float('-inf'))
                 
                 # Apply temperature scaling if specified
                 if self.temp > 0:
