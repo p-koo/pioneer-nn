@@ -1,5 +1,4 @@
 import torch
-
 from bmdal_reg.bmdal.feature_data import TensorFeatureData
 from bmdal_reg.bmdal.algorithms import select_batch
 
@@ -38,8 +37,7 @@ class RandomAcquisition(Acquisition):
         
     Examples
     --------
-    >>> acq = Random(target_size=32)
-    >>> selected_seqs, indices = acq.select(sequences)
+    >>> x, idx = Random(target_size=32)
     """
     def __init__(self, target_size, seed=None):
         self.target_size = target_size
@@ -76,8 +74,7 @@ class UncertaintyAcquisition(Acquisition):
         
     Examples
     --------
-    >>> acq = Uncertainty(target_size=32, model=uncertainty_model)
-    >>> selected_seqs, indices = acq.select(sequences, batch_size=512)
+    >>> x, idx = Uncertainty(target_size=32, model=uncertainty_model)
     """
     def __init__(self, target_size, surrogate_model):
         self.target_size = target_size
@@ -135,18 +132,14 @@ class LCMDAcquisition(Acquisition):
         
     Examples
     --------
-    >>> acq = LCMDAcquisition(target_size=32, models=models, x_train=x_train, y_train=y_train)
-    >>> selected_seqs, indices = acq.select(sequences)
+    >>> x, idx = LCMDAcquisition(target_size=32, models=models, x_train=x_train, y_train=y_train)
     """
-    def __init__(self, target_size, models, x_train, y_train, device='cuda', 
-                 batch_size=100, base_kernel='grad', 
+    def __init__(self, target_size, models, x_train, y_train, base_kernel='grad', 
                  kernel_transforms=[('rp', [512])], sel_with_train=False):
         self.target_size = target_size
         self.models = models
         self.x_train = x_train
         self.y_train = y_train
-        self.device = device
-        self.batch_size = batch_size
         self.base_kernel = base_kernel
         self.kernel_transforms = kernel_transforms
         self.sel_with_train = sel_with_train
@@ -164,15 +157,12 @@ class LCMDAcquisition(Acquisition):
         tuple[torch.Tensor, torch.Tensor]
             Selected sequences and their indices
         """
-        precomp_batch_size=self.external_batch_size #QUIQUINEW NOT USED!!!
-        nn_batch_size=self.external_batch_size #QUIQUINEW NOT USED!!!
 
         train_data = TensorFeatureData(torch.tensor(self.x_train))
-        pool_data = TensorFeatureData(torch.tensor(x_pool))
-
-
-        idx, _ = select_batch(batch_size=self.n_to_get, models=self.models, 
+        pool_data = TensorFeatureData(torch.tensor(x))
+        idx, _ = select_batch(batch_size=self.target_size, models=self.models, 
                                 data={'train': train_data, 'pool': pool_data}, y_train=self.y_train,
                                 selection_method=self.selection_method, sel_with_train=self.sel_with_train,
-                                base_kernel=self.base_kernel, kernel_transforms=self.kernel_transforms) # return batch_idxs, results_dict : def select within class BatchSelectorImpl in algorithms.py
-        return(idx)
+                                base_kernel=self.base_kernel, kernel_transforms=self.kernel_transforms) 
+
+        return x[idx], idx

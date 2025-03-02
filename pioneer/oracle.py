@@ -24,7 +24,8 @@ class Oracle:
         Returns
         -------
         torch.Tensor
-            Ground truth labels of shape (N,)
+            Ground truth labels of shape (N,) for single task
+            or (N, T) for T tasks
         """
         raise NotImplementedError
 
@@ -40,6 +41,8 @@ class SingleOracle(Oracle):
         Arguments to initialize the model
     weight_path : str
         Path to model weights file
+    predictor : Predictor
+        Prediction method for generating outputs
     device : str, optional
         Device to run model on ('cuda' or 'cpu').
         Defaults to 'cuda' if available, by default None
@@ -48,10 +51,11 @@ class SingleOracle(Oracle):
     --------
     >>> model_class = MyModel
     >>> model_kwargs = {'hidden_dim': 256}
-    >>> oracle = SingleOracle(model_class, model_kwargs, 'weights.pt')
+    >>> predictor = Scalar()  # For scalar outputs
+    >>> oracle = SingleOracle(model_class, model_kwargs, 'weights.pt', predictor)
     >>> labels = oracle.predict(sequences)
     """
-    def __init__(self, model_class, model_kwargs, weight_path, device=None):
+    def __init__(self, model_class, model_kwargs, weight_path, predictor, device=None):
         # Set device (default to GPU if available)
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -60,6 +64,7 @@ class SingleOracle(Oracle):
         self.model.to(self.device)
         self.model.load_state_dict(torch.load(weight_path, map_location=self.device))
         self.model.eval()
+        self.predictor = predictor
 
     def predict(self, x, batch_size=32):
         """Generate predictions using batched inference.
@@ -67,26 +72,33 @@ class SingleOracle(Oracle):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
         batch_size : int, optional
-            Batch size for processing, by default 32
+            Batch size for processing. Decrease this value if running into 
+            GPU memory issues, by default 32
                 
         Returns
         -------
         torch.Tensor
-            Model predictions of shape (N,)
+            Model predictions of shape (N,) for single task
+            or (N, T) for T tasks
         """
-        # Process sequences in batches
-        loader = DataLoader(TensorDataset(x), batch_size=batch_size)
         predictions = []
         
+        # Create DataLoader for batched processing
+        dataset = TensorDataset(x)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        
         with torch.no_grad():
-            for batch in loader:
-                # Generate predictions for current batch
-                pred = self.model(batch[0])
+            for batch_x, in loader:
+                # Move batch to GPU, get predictions, move back to CPU
+                batch_x = batch_x.to(self.device)
+                pred = self.predictor.predict(self.model, batch_x).cpu()
                 predictions.append(pred)
                 
-        # Combine all batch results
         return torch.cat(predictions, dim=0)
 
 
@@ -101,6 +113,8 @@ class EnsembleOracle(Oracle):
         Arguments to initialize each model
     weight_paths : list[str]
         Paths to model weight files
+    predictor : Predictor
+        Prediction method for generating outputs
     device : str, optional
         Device to run models on ('cuda' or 'cpu').
         Defaults to 'cuda' if available, by default None
@@ -110,10 +124,11 @@ class EnsembleOracle(Oracle):
     >>> model_class = MyModel
     >>> model_kwargs = {'hidden_dim': 256}
     >>> weight_paths = ['model1.pt', 'model2.pt', 'model3.pt']
-    >>> oracle = EnsembleOracle(model_class, model_kwargs, weight_paths)
+    >>> predictor = Profile(reduction=torch.mean)  # For profile outputs
+    >>> oracle = EnsembleOracle(model_class, model_kwargs, weight_paths, predictor)
     >>> labels = oracle.predict(sequences)
     """
-    def __init__(self, model_class, model_kwargs, weight_paths, device=None):
+    def __init__(self, model_class, model_kwargs, weight_paths, predictor, device=None):
         # Set device (default to GPU if available)
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         
@@ -125,6 +140,7 @@ class EnsembleOracle(Oracle):
             model.load_state_dict(torch.load(path, map_location=self.device))
             model.eval()
             self.models.append(model)
+        self.predictor = predictor
 
     def predict(self, x, batch_size=32):
         """Generate ensemble predictions using batched inference.
@@ -132,28 +148,42 @@ class EnsembleOracle(Oracle):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
         batch_size : int, optional
-            Batch size for processing, by default 32
+            Batch size for processing. Decrease this value if running into 
+            GPU memory issues, by default 32
                 
         Returns
         -------
         torch.Tensor
-            Mean predictions across ensemble of shape (N,)
+            Mean predictions across ensemble of shape (N,) for single task
+            or (N, T) for T tasks
         """
-        # Process sequences in batches
-        loader = DataLoader(TensorDataset(x), batch_size=batch_size)
         predictions = []
         
+        # Create DataLoader for batched processing
+        dataset = TensorDataset(x)
+        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        
         with torch.no_grad():
-            for batch in loader:
+            for batch_x, in loader:
+                # Move batch to GPU
+                batch_x = batch_x.to(self.device)
+                
                 # Get predictions from all models
-                preds = torch.stack([
-                    model(batch[0]) for model in self.models
+                batch_preds = torch.stack([
+                    self.predictor.predict(model, batch_x)
+                    for model in self.models
                 ])
-                # Average predictions across ensemble
-                pred = torch.mean(preds, dim=0)
+                
+                # Average predictions across ensemble and move to CPU
+                pred = batch_preds.mean(dim=0).cpu()
                 predictions.append(pred)
                 
-        # Combine all batch results
         return torch.cat(predictions, dim=0)
+
+
+    
