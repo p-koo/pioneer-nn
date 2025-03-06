@@ -121,7 +121,7 @@ class Mutagenesis(Generator):
         torch.Tensor
             Mutated sequences with same shape as input
         """
-        N, A, L = x.shape
+        N_total, A, L = x.shape
 
         # Set mutation window
         start = 0 if self.mut_window is None else self.mut_window[0]
@@ -135,21 +135,23 @@ class Mutagenesis(Generator):
 
         for batch_x, in loader:
             # Convert one-hot to indices
-            indices = batch_x.argmax(dim=1).to(self.device)
+            current_nt_indices = batch_x.argmax(dim=1).to(self.device)
+            N = current_nt_indices.shape[0]
             
-            
-            window_mutations = torch.zeros(N, window_size, device=self.device)
+            mutation_rotation = torch.zeros(N, window_size, device=self.device).float()
             
             # Generate random mutations
-            mask = torch.rand(N, window_size, device=self.device) < self.mut_rate
-            window_mutations[mask] = torch.randint(1, A, (mask.sum(),), device=self.device)
+            mut_num = int(window_size*self.mut_rate)
+            mutation_idx = torch.argsort(torch.rand(N, window_size, device=self.device), dim=1)[:, :mut_num] #random positions to mutate
+            batch_idx, _ = torch.meshgrid(torch.arange(N, device=self.device), torch.arange(mut_num, device=self.device), indexing='ij')
+            mutation_rotation[batch_idx.flatten(), mutation_idx.flatten()] = torch.randint(1, A, (N*mut_num,), device=self.device).float() # random over alphabet
             
             # Apply mutations and convert back to one-hot
-            indices[:, start:end] = (indices[:, start:end] + window_mutations) % A
-            batch_mut = F.one_hot(indices, num_classes=A).permute(0, 2, 1).detach().cpu()
+            current_nt_indices[:, start:end] = (current_nt_indices[:, start:end] + mutation_rotation) % A
+            batch_mut = F.one_hot(current_nt_indices, num_classes=A).permute(0, 2, 1).detach().cpu()
             x_mut.append(batch_mut)
         
-        return torch.cat(x_mut, dim=0)
+        return torch.cat(x_mut, dim=0).float()
 
 
 class GuidedMutagenesis(Generator):

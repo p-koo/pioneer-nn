@@ -50,41 +50,42 @@ def test_random_generator(sample_data):
         assert torch.allclose(empirical_probs, torch.tensor(prob), atol=0.05), "Empirical probabilities don't match expected probabilities"
         
 
-# def test_mutagenesis_generator(sample_data):
-#     for mut_rate in [0.1, 0.25, 0.5, 0.75, 1.0]:
-#         gen = Mutagenesis(mut_rate=mut_rate, seed=42)
+def test_mutagenesis_generator(sample_data):
+    for mut_rate in [0.1, 0.25, 0.5, 0.75, 1.0]:
+        gen = Mutagenesis(mut_rate=mut_rate, seed=42)
         
-#         # Test shapes
-#         N, A, L = sample_data.shape
-#         out = gen.generate(sample_data)
-#         assert out.shape == (N, A, L), "Output shape mismatch"
-#         assert out.dtype == torch.float32, "Output dtype mismatch"
-        
-#         # Test mutation rate
-#         empirical_mut_rate = ((sample_data != out).float().sum(dim=(1,2)) == 2).float().mean()
-#         assert empirical_mut_rate.item() == mut_rate, "Mutation rate mismatch"
-        
-#        # Test one-hot property
-#         assert (out.sum(dim=1) == 1).all(), "One-hot property mismatch"
-#         # Check that all elements are either 0 or 1
-#         assert torch.all(torch.logical_or(out == 0, out == 1)), "Elements are not 0 or 1"
-        
-#         # Test mutation window
-#         gen_window = Mutagenesis(mut_rate=mut_rate, mut_window=(10,20), seed=42)
-#         out_window = gen_window.generate(sample_data)
+        # Test shapes
+        N, A, L = sample_data.shape
+        out = gen.generate(sample_data)
+        assert out.shape == (N, A, L), "Output shape mismatch"
+        assert out.dtype == torch.float32, "Output dtype mismatch"
 
-#         # Test one-hot property
-#         assert (out_window.sum(dim=1) == 1).all(), "One-hot property mismatch"
-#         # Check that all elements are either 0 or 1
-#         assert torch.all(torch.logical_or(out_window == 0, out_window == 1)), "Elements are not 0 or 1"
+        # Test one-hot property
+        assert (out.sum(dim=1) == 1).all(), "One-hot property mismatch"
+        # Check that all elements are either 0 or 1
+        assert torch.all(torch.logical_or(out == 0, out == 1)), "Elements are not 0 or 1"
+        
+        # Test mutation rate
+        empirical_mut_rate = ((sample_data != out).int().sum(dim=1) == 2).float().mean()
+        assert torch.allclose(empirical_mut_rate, torch.tensor(mut_rate), atol=0.05), "Mutation rate mismatch"
+        
+        
+        # Test mutation window
+        gen_window = Mutagenesis(mut_rate=mut_rate, mut_window=(10,20), seed=42)
+        out_window = gen_window.generate(sample_data)
 
-#         # Test no mutations in other regions
-#         assert torch.equal(sample_data[:,:,:10], out_window[:,:,:10]), "Out of window mutations"
-#         assert torch.equal(sample_data[:,:,20:], out_window[:,:,20:]), "Out of window mutations"
+        # Test one-hot property
+        assert (out_window.sum(dim=1) == 1).all(), "One-hot property mismatch"
+        # Check that all elements are either 0 or 1
+        assert torch.all(torch.logical_or(out_window == 0, out_window == 1)), "Elements are not 0 or 1"
 
-#         # Test proper mutation rate in window
-#         empirical_mut_rate = ((sample_data[:,:,10:20] != out_window[:,:,10:20]).float().sum(dim=(1,2)) == 2).float().mean()
-#         assert empirical_mut_rate.item() == mut_rate, "Mutation rate mismatch"
+        # Test no mutations in other regions
+        assert torch.equal(sample_data[:,:,:10], out_window[:,:,:10]), "Out of window mutations"
+        assert torch.equal(sample_data[:,:,20:], out_window[:,:,20:]), "Out of window mutations"
+
+        # Test proper mutation rate in window
+        empirical_mut_rate = ((sample_data[:,:,10:20] != out_window[:,:,10:20]).float().sum(dim=1)== 2).float().mean()
+        assert torch.allclose(empirical_mut_rate, torch.tensor(mut_rate), atol=0.05), "Mutation rate mismatch"
 
 # def test_guided_mutagenesis(sample_data):
 #     # Mock attribution method
