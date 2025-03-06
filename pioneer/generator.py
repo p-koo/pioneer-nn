@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
-from typing import Callable
+from typing import Callable, Union
 class Generator:
     """Abstract base class for sequence generators.
     
@@ -42,7 +42,7 @@ class Random(Generator):
     >>> gen = Random(prob=[0.3, 0.2, 0.2, 0.3])
     >>> random_seqs = gen.generate(sequences)
     """
-    def __init__(self, prob: list[float] | None = None, seed: int | None = None):
+    def __init__(self, prob: Union[list[float], None] = None, seed: Union[int, None] = None):
         # Set nucleotide probabilities (default to uniform)
         if prob is None:
             self.prob = torch.tensor([0.25] * 4)
@@ -67,7 +67,12 @@ class Random(Generator):
             Random sequences with same shape as input
         """
         N, A, L = x.shape
-        return torch.multinomial(self.prob, N * L, replacement=True).view(N, A, L)
+        nt_idx = torch.multinomial(self.prob, N * L, replacement=True)
+        x = torch.zeros(N*L,A, device=x.device)
+        x[torch.arange(N*L),nt_idx] = 1
+        x = x.view(N, L, A)
+        x = x.transpose(1,2)
+        return x
 
 
 class Mutagenesis(Generator):
@@ -92,8 +97,8 @@ class Mutagenesis(Generator):
     >>> mutated = gen.generate(sequences)
     """
     def __init__(self, mut_rate: float = 0.1, 
-                 mut_window: tuple[int, int] | None = None, 
-                 seed: int | None = None, 
+                 mut_window: Union[tuple[int, int], None] = None, 
+                 seed: Union[int, None] = None, 
                  batch_size: int = 32):
         assert 0 <= mut_rate <= 1
         self.mut_rate = mut_rate
@@ -171,8 +176,8 @@ class GuidedMutagenesis(Generator):
     >>> guided_mutations = gen.generate(sequences)
     """
     def __init__(self, attr_method: Callable, mut_rate: float = 0.1, 
-                 mut_window: tuple[int, int] | None = None, 
-                 temp: float | str = -1, seed: int | None = None, 
+                 mut_window: Union[tuple[int, int], None] = None, 
+                 temp: Union[float, str] = -1, seed: Union[int, None] = None, 
                  batch_size: int = 32,
                  dont_repeat_positions: bool = True):
         assert 0 <= mut_rate <= 1
@@ -289,7 +294,7 @@ class Sequential(Generator):
         >>> seq_gen = Sequential([g1, g2])
         >>> mutated = seq_gen.generate(sequences)
     """
-    def __init__(self, generator_list: list[Generator], seed: int | None = None):
+    def __init__(self, generator_list: list[Generator], seed: Union[int, None] = None):
         self.generator_list = generator_list
         if seed is not None:
             torch.manual_seed(seed)
@@ -327,7 +332,7 @@ class MultiGenerator(Generator):
         >>> multi_gen = MultiGenerator([g1, g2])
         >>> mutated = multi_gen.generate(sequences)  # 2x batch size
     """
-    def __init__(self, generator_list: list[Generator], seed: int | None = None):
+    def __init__(self, generator_list: list[Generator], seed: Union[int, None] = None):
         self.generator_list = generator_list
         if seed is not None:
             torch.manual_seed(seed)
