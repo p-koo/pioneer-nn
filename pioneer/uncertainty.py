@@ -8,7 +8,7 @@ class UncertaintyMethod:
     All uncertainty methods should inherit from this class and implement
     the estimate method.
     """
-    def estimate(self, model, x, batch_size=32):
+    def estimate(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates for input sequences.
         
         Parameters
@@ -46,7 +46,7 @@ class MCDropout(UncertaintyMethod):
         self.n_samples = n_samples
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-    def estimate(self, model, x, batch_size=32):
+    def estimate(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using MC Dropout.
         
         Parameters
@@ -55,9 +55,6 @@ class MCDropout(UncertaintyMethod):
             PyTorch model with dropout layers
         x : torch.Tensor
             Input sequences of shape (N, A, L)
-        batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
             
         Returns
         -------
@@ -65,27 +62,18 @@ class MCDropout(UncertaintyMethod):
             Uncertainty scores of shape (N,)
         """
         model.train()  # Enable dropout
-        uncertainties = []
         
-        # Create DataLoader for batched processing
-        dataset = TensorDataset(x)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        
-        with torch.no_grad():
-            for batch_x, in loader:
-                # Move batch to GPU
-                batch_x = batch_x.to(self.device)
+        x = x.to(self.device)   
                 
-                # Multiple forward passes with dropout
-                preds = torch.stack([
-                    model(batch_x) for _ in range(self.n_samples)
-                ])
+        # Multiple forward passes with dropout
+        preds = torch.stack([
+            model(x) for _ in range(self.n_samples)
+        ])
                 
-                # Calculate uncertainty and move to CPU
-                uncertainty = torch.std(preds, dim=0).cpu()
-                uncertainties.append(uncertainty)
+        # Calculate uncertainty and move to CPU
+        uncertainty = torch.std(preds, dim=0)
                 
-        return torch.cat(uncertainties, dim=0)
+        return uncertainty
 
 
 class DeepEnsemble(UncertaintyMethod):
@@ -100,7 +88,7 @@ class DeepEnsemble(UncertaintyMethod):
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-    def estimate(self, models, x, batch_size=32):
+    def estimate(self, models: list[torch.nn.Module], x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using model ensemble.
         
         Parameters
@@ -109,9 +97,6 @@ class DeepEnsemble(UncertaintyMethod):
             List of PyTorch models
         x : torch.Tensor
             Input sequences of shape (N, A, L)
-        batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
             
         Returns
         -------
@@ -119,26 +104,17 @@ class DeepEnsemble(UncertaintyMethod):
             Uncertainty scores of shape (N,)
         """
         [model.eval() for model in models]
-        uncertainties = []
-        
-        # Create DataLoader for batched processing
-        dataset = TensorDataset(x)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
-        
-        with torch.no_grad():
-            for batch_x, in loader:
-                # Move batch to GPU
-                batch_x = batch_x.to(self.device)
+
+        x = x.to(self.device)
                 
-                # Get predictions from all models
-                preds = torch.stack([
-                    model(batch_x) for model in models
-                ])
+        # Get predictions from all models
+        preds = torch.stack([
+            model(x) for model in models
+        ])
                 
-                # Calculate uncertainty and move to CPU
-                uncertainty = torch.std(preds, dim=0).cpu()
-                uncertainties.append(uncertainty)
+        # Calculate uncertainty and move to CPU
+        uncertainty = torch.std(preds, dim=0)
                 
-        return torch.cat(uncertainties, dim=0)
+        return uncertainty
     
 
