@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
-
+from typing import Callable
 class Generator:
     """Abstract base class for sequence generators.
     
@@ -42,7 +42,7 @@ class Random(Generator):
     >>> gen = Random(prob=[0.3, 0.2, 0.2, 0.3])
     >>> random_seqs = gen.generate(sequences)
     """
-    def __init__(self, prob=None, seed=None):
+    def __init__(self, prob: list[float] | None = None, seed: int | None = None):
         # Set nucleotide probabilities (default to uniform)
         if prob is None:
             self.prob = torch.tensor([0.25] * 4)
@@ -82,18 +82,26 @@ class Mutagenesis(Generator):
         If None, mutates entire sequence, by default None
     seed : int, optional
         Random seed for reproducibility, by default None
+    batch_size : int, optional
+        Batch size for processing. Decrease this value if running into 
+        GPU memory issues, by default 32
             
     Examples
     --------
     >>> gen = Mutagenesis(mut_rate=0.1, mut_window=(10, 20))
     >>> mutated = gen.generate(sequences)
     """
-    def __init__(self, mut_rate=0.1, mut_window=None, seed=None):
+    def __init__(self, mut_rate: float = 0.1, 
+                 mut_window: tuple[int, int] | None = None, 
+                 seed: int | None = None, 
+                 batch_size: int = 32):
         assert 0 <= mut_rate <= 1
         self.mut_rate = mut_rate
         self.mut_window = mut_window
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if seed is not None:
             torch.manual_seed(seed)
+        self.batch_size = batch_size
 
     def generate(self, x):
         """Generate mutated sequences based on mutation rate.
@@ -110,24 +118,33 @@ class Mutagenesis(Generator):
         """
         N, A, L = x.shape
 
-        # Convert one-hot to indices
-        indices = x.argmax(dim=1)
-        
         # Set mutation window
         start = 0 if self.mut_window is None else self.mut_window[0]
         end = L if self.mut_window is None else self.mut_window[1]
         window_size = end - start
-        window_mutations = torch.zeros(N, window_size)
+
+        x_mut = []
+
+        dataset = TensorDataset(x)
+        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+
+        for batch_x, in loader:
+            # Convert one-hot to indices
+            indices = batch_x.argmax(dim=1).to(self.device)
+            
+            
+            window_mutations = torch.zeros(N, window_size, device=self.device)
+            
+            # Generate random mutations
+            mask = torch.rand(N, window_size, device=self.device) < self.mut_rate
+            window_mutations[mask] = torch.randint(1, A, (mask.sum(),), device=self.device)
+            
+            # Apply mutations and convert back to one-hot
+            indices[:, start:end] = (indices[:, start:end] + window_mutations) % A
+            batch_mut = F.one_hot(indices, num_classes=A).permute(0, 2, 1).detach().cpu()
+            x_mut.append(batch_mut)
         
-        # Generate random mutations
-        mask = torch.rand(N, window_size) < self.mut_rate
-        window_mutations[mask] = torch.randint(1, A, (mask.sum(),))
-        
-        # Apply mutations and convert back to one-hot
-        indices[:, start:end] = (indices[:, start:end] + window_mutations) % A
-        x_mut = F.one_hot(indices, num_classes=A).permute(0, 2, 1)
-        
-        return x_mut
+        return torch.cat(x_mut, dim=0)
 
 
 class GuidedMutagenesis(Generator):
@@ -153,7 +170,11 @@ class GuidedMutagenesis(Generator):
     >>> gen = GuidedMutagenesis(attr_method, mut_rate=0.1, temp=1.0)
     >>> guided_mutations = gen.generate(sequences)
     """
-    def __init__(self, attr_method, mut_rate=0.1, mut_window=None, temp=-1, seed=None):
+    def __init__(self, attr_method: Callable, mut_rate: float = 0.1, 
+                 mut_window: tuple[int, int] | None = None, 
+                 temp: float | str = -1, seed: int | None = None, 
+                 batch_size: int = 32,
+                 dont_repeat_positions: bool = True):
         assert 0 <= mut_rate <= 1
         self.attr_method = attr_method
         self.mut_rate = mut_rate
@@ -162,8 +183,10 @@ class GuidedMutagenesis(Generator):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         if seed is not None:
             torch.manual_seed(seed)
+        self.batch_size = batch_size
+        self.dont_repeat_positions = dont_repeat_positions
 
-    def generate(self, x, batch_size=32):
+    def generate(self, x):
         """Generate mutations guided by attribution scores.
         
         Parameters
@@ -179,9 +202,15 @@ class GuidedMutagenesis(Generator):
         torch.Tensor
             Mutated sequences with same shape as input
         """
+
+        # Set mutation window
+        start = 0 if self.mut_window is None else self.mut_window[0]
+        end = L if self.mut_window is None else self.mut_window[1]
+        window_size = end - start
+
         # Create DataLoader for batched processing
         dataset = TensorDataset(x)
-        loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+        loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
         
         mutations = []
         for batch_x, in loader:
@@ -191,18 +220,16 @@ class GuidedMutagenesis(Generator):
             # Get shape parameters for this batch
             batch_size, A, L = batch_x.shape
             
-            # Set mutation window
-            start = 0 if self.mut_window is None else self.mut_window[0]
-            end = L if self.mut_window is None else self.mut_window[1]
-            window_size = end - start
+            
             n_mutations = torch.floor(torch.tensor(window_size * self.mut_rate)).long()
             
             # Clone input for mutations
             batch_mut = batch_x.clone()
             
             # Track mutated positions
-            mutated_positions = torch.zeros((batch_size, window_size), 
-                                         dtype=torch.bool, device=self.device)
+            if self.dont_repeat_positions:
+                mutated_positions = torch.zeros((batch_size, window_size), 
+                                             dtype=torch.bool, device=self.device)
             
             # Apply mutations one at a time
             for _ in range(n_mutations):
@@ -213,14 +240,20 @@ class GuidedMutagenesis(Generator):
                 # Zero out current nucleotide scores and previously mutated positions
                 current_nt_mask = batch_mut[:, :, start:end].bool()
                 attr_map[current_nt_mask] = torch.tensor(float('-inf'))
-                attr_map[:, :, mutated_positions] = torch.tensor(float('-inf'))
+                if self.dont_repeat_positions:
+                    attr_map[:, :, mutated_positions] = torch.tensor(float('-inf'))
                 
                 # Apply temperature scaling if specified
                 if self.temp > 0:
-                    attr_map = attr_map / self.temp
+                    probs = F.softmax(attr_map.reshape(batch_size, -1) / self.temp, dim=1)
+                else:
+                    reshaped_map = attr_map.reshape(batch_size, -1)
+                    p_inds = torch.argmax(reshaped_map, dim=1)
+                    probs = torch.zeros_like(reshaped_map, device=self.device)
+                    probs[torch.arange(batch_size, device=self.device), p_inds] = 1
                 
                 # Convert to probabilities and sample mutations
-                probs = F.softmax(attr_map.reshape(batch_size, -1), dim=1)
+                
                 mut_indices = torch.multinomial(probs, 1).squeeze()
                 
                 # Convert to nucleotide and position indices
@@ -234,7 +267,8 @@ class GuidedMutagenesis(Generator):
                          mut_positions[None].T + start] = 1
                 
                 # Update mutated positions tracker
-                mutated_positions[batch_idx, mut_positions] = True
+                if self.dont_repeat_positions:
+                    mutated_positions[batch_idx, mut_positions] = True
             
             # Move results back to CPU
             mutations.append(batch_mut.cpu())
@@ -255,12 +289,12 @@ class Sequential(Generator):
         >>> seq_gen = Sequential([g1, g2])
         >>> mutated = seq_gen.generate(sequences)
     """
-    def __init__(self, generator_list, seed=None):
+    def __init__(self, generator_list: list[Generator], seed: int | None = None):
         self.generator_list = generator_list
         if seed is not None:
             torch.manual_seed(seed)
 
-    def generate(self, x):
+    def generate(self, x: torch.Tensor) -> torch.Tensor:
         """Apply generators sequentially to input sequences.
         
         Args:
@@ -293,12 +327,12 @@ class MultiGenerator(Generator):
         >>> multi_gen = MultiGenerator([g1, g2])
         >>> mutated = multi_gen.generate(sequences)  # 2x batch size
     """
-    def __init__(self, generator_list, seed=None):
+    def __init__(self, generator_list: list[Generator], seed: int | None = None):
         self.generator_list = generator_list
         if seed is not None:
             torch.manual_seed(seed)
 
-    def generate(self, x):
+    def generate(self, x: torch.Tensor) -> torch.Tensor:
         """Apply generators in parallel and combine results.
         
         Args:
