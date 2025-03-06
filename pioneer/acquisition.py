@@ -1,7 +1,7 @@
 import torch
 from bmdal_reg.bmdal.feature_data import TensorFeatureData
 from bmdal_reg.bmdal.algorithms import select_batch
-
+from typing import Callable
 
 class Acquisition:
     """Abstract base class for sequence acquisition.
@@ -44,7 +44,7 @@ class RandomAcquisition(Acquisition):
         if seed is not None:
             torch.manual_seed(seed)
 
-    def select(self, x):
+    def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Randomly select sequences.
         
         Parameters
@@ -62,33 +62,36 @@ class RandomAcquisition(Acquisition):
         return x[idx], idx
 
 
-class UncertaintyAcquisition(Acquisition):
+class ScoreAcquisition(Acquisition):
     """Acquisition that selects sequences with highest uncertainty scores.
     
     Parameters
     ----------
     target_size : int
         Number of sequences to select
-    surrogate_model : ModelWrapper
-        Model that provides uncertainty scores
+    scorer : Callable
+        Function that scores sequences
         
     Examples
     --------
-    >>> x, idx = Uncertainty(target_size=32, model=uncertainty_model)
+    >>> # Using uncertainty scores from a model wrapper
+    >>> acq = ScoreAcquisition(target_size=32, scorer=model.uncertainty)
+    >>> x, idx = acq.select(sequences)
+    >>> # Using Y scores from a model wrapper
+    >>> acq = ScoreAcquisition(target_size=32, scorer=model.predict)
+    >>> x, idx = acq.select(sequences)
     """
-    def __init__(self, target_size, surrogate_model):
+    def __init__(self, target_size: int, scorer: Callable):
         self.target_size = target_size
-        self.surrogate_model = surrogate_model
+        self.scorer = scorer
 
-    def select(self, x, batch_size=32):
-        """Select sequences with highest uncertainty scores.
+    def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Select sequences with highest scores.
         
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L)
-        batch_size : int, optional
-            Batch size for uncertainty computation, by default 32
             
         Returns
         -------
@@ -96,7 +99,7 @@ class UncertaintyAcquisition(Acquisition):
             Selected sequences and their indices
         """
         # Get uncertainty scores in batches
-        scores = self.surrogate_model.uncertainty(x, batch_size=batch_size)
+        scores = self.scorer(x)
         
         # Get indices of top uncertainty scores
         _, idx = torch.sort(scores, descending=True)
@@ -144,7 +147,7 @@ class LCMDAcquisition(Acquisition):
         self.kernel_transforms = kernel_transforms
         self.sel_with_train = sel_with_train
 
-    def select(self, x):
+    def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Select sequences using LCMD method.
         
         Parameters
