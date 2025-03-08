@@ -1,8 +1,6 @@
 import torch
-from bmdal_reg.bmdal.feature_data import TensorFeatureData
-from bmdal_reg.bmdal.algorithms import select_batch
-from typing import Callable
-
+from typing import Callable, Union
+from torch.utils.data import TensorDataset, DataLoader
 class Acquisition:
     """Abstract base class for sequence acquisition.
     
@@ -57,6 +55,7 @@ class RandomAcquisition(Acquisition):
         tuple[torch.Tensor, torch.Tensor]
             Selected sequences and their indices
         """
+        assert x.shape[0] >= self.target_size, "Target size is larger than the number of sequences"
         N = x.shape[0]
         idx = torch.randperm(N)[:self.target_size]
         return x[idx], idx
@@ -81,9 +80,11 @@ class ScoreAcquisition(Acquisition):
     >>> acq = ScoreAcquisition(target_size=32, scorer=model.predict)
     >>> x, idx = acq.select(sequences)
     """
-    def __init__(self, target_size: int, scorer: Callable):
+    def __init__(self, target_size: int, scorer: Callable, batch_size: int = 32, device: Union[str,None] = None):
         self.target_size = target_size
         self.scorer = scorer
+        self.batch_size = batch_size
+        self.device = device if device is not None else 'cuda' if torch.cuda.is_available() else 'cpu'
 
     def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Select sequences with highest scores.
@@ -98,14 +99,29 @@ class ScoreAcquisition(Acquisition):
         tuple[torch.Tensor, torch.Tensor]
             Selected sequences and their indices
         """
-        # Get uncertainty scores in batches
-        scores = self.scorer(x)
-        
-        # Get indices of top uncertainty scores
-        _, idx = torch.sort(scores, descending=True)
-        idx = idx[:self.target_size]
-        
-        return x[idx], idx
+        assert x.shape[0] >= self.target_size, "Target size is larger than the number of sequences"
+        if x.shape[0] < self.batch_size:
+            scores = self.scorer(x.to(self.device)).squeeze()
+            _, idx = torch.sort(scores, descending=True)
+            idx = idx[:self.target_size]
+            return x[idx], idx
+        else:
+            #Make data loader
+            dataset = TensorDataset(x)
+            dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+
+            # Get uncertainty scores in batches
+            scores = []
+            for batch in dataloader:
+                with torch.no_grad():
+                    scores.append(self.scorer(batch[0].to(self.device)).cpu())
+            scores = torch.cat(scores, dim=0).squeeze()
+            
+            # Get indices of top uncertainty scores
+            _, idx = torch.sort(scores, descending=True)
+            idx = idx[:self.target_size]
+            
+            return x[idx], idx
     
 
 
@@ -139,6 +155,9 @@ class LCMDAcquisition(Acquisition):
     """
     def __init__(self, target_size, models, x_train, y_train, base_kernel='grad', 
                  kernel_transforms=[('rp', [512])], sel_with_train=False):
+        from bmdal_reg.bmdal.feature_data import TensorFeatureData
+        from bmdal_reg.bmdal.algorithms import select_batch
+        
         self.target_size = target_size
         self.models = models
         self.x_train = x_train
@@ -146,6 +165,8 @@ class LCMDAcquisition(Acquisition):
         self.base_kernel = base_kernel
         self.kernel_transforms = kernel_transforms
         self.sel_with_train = sel_with_train
+        self.TensorFeatureData = TensorFeatureData
+        self.select_batch = select_batch
 
     def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Select sequences using LCMD method.
@@ -161,9 +182,9 @@ class LCMDAcquisition(Acquisition):
             Selected sequences and their indices
         """
 
-        train_data = TensorFeatureData(torch.tensor(self.x_train))
-        pool_data = TensorFeatureData(torch.tensor(x))
-        idx, _ = select_batch(batch_size=self.target_size, models=self.models, 
+        train_data = self.TensorFeatureData(torch.tensor(self.x_train))
+        pool_data = self.TensorFeatureData(torch.tensor(x))
+        idx, _ = self.select_batch(batch_size=self.target_size, models=self.models, 
                                 data={'train': train_data, 'pool': pool_data}, y_train=self.y_train,
                                 selection_method=self.selection_method, sel_with_train=self.sel_with_train,
                                 base_kernel=self.base_kernel, kernel_transforms=self.kernel_transforms) 
