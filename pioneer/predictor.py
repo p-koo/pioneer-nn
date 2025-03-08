@@ -58,15 +58,13 @@ class Scalar(Predictor):
         torch.Tensor
             Scalar predictions of shape (N,) or (N, T) for T tasks
         """
-        predictions = []        
-        with torch.no_grad():
-            pred = model(x)
-            # Handle multi-task output if task_index specified
-            if self.task_index is not None:
-                pred = pred[:, self.task_index]
-            predictions.append(pred)              
-             
-        return torch.cat(predictions, dim=0)
+       
+        pred = model(x)
+        # Handle multi-task output if task_index specified
+        if self.task_index is not None:
+            pred = pred[:, self.task_index]
+            
+        return pred
 
 
 class Profile(Predictor):
@@ -113,21 +111,19 @@ class Profile(Predictor):
             The scalar values are obtained by applying the reduction function
             across the sequence length dimension.
         """
-        predictions = []        
-        with torch.no_grad():
-            # Model output shape: (N, T, L) or (N, L) where:
-            # N is batch size, T is number of tasks, L is sequence length
-            pred = model(x)
-                
-            # Handle multi-task output if task_index specified
-            if self.task_index is not None:
-                # Select specific task: (N, L) from (N, T, L)
-                pred = pred[:, self.task_index, :]
+        # Model output shape: (N, T, L) or (N, L) where:
+        # N is batch size, T is number of tasks, L is sequence length
+        pred = model(x)
             
-            # Apply reduction across sequence length dimension to get scalar per sequence
-            predictions.append(self.reduction(pred))
+        # Handle multi-task output if task_index specified
+        if self.task_index is not None:
+            # Select specific task: (N, L) from (N, T, L)
+            pred = pred[:, self.task_index, :]
+        
+        # Apply reduction across sequence length dimension to get scalar per sequence
+        pred = self.reduction(pred, dim=2)
 
-        return torch.cat(predictions, dim=0)
+        return pred
     
 
 
