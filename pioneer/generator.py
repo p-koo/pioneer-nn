@@ -2,23 +2,26 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 from typing import Callable, Union
-class Generator:
+import sys
+sys.path.append('./')
+from proposer import Proposer
+
+
+
+class Generator(Proposer):
     """Abstract base class for sequence generators.
     
     All generator classes should inherit from this class and implement
     the generate method.
     """
-    def generate(self, x):
+    def __call__(self, x):
         """Generate modified sequences from input sequences.
         
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L) where:
-            N is batch size,
-            A is alphabet size,
-            L is sequence length
-                
+            Input sequences of shape (N, A, L)
+            
         Returns
         -------
         torch.Tensor
@@ -26,8 +29,7 @@ class Generator:
         """
         pass
 
-
-class Random(Generator):
+class RandomGenerator(Generator):
     """Generator that creates random sequences based on nucleotide probabilities.
     
     Parameters
@@ -56,7 +58,7 @@ class Random(Generator):
 
         self.mut_window = mut_window
 
-    def generate(self, x):
+    def __call__(self, x):
         """Generate random sequences using specified probabilities.
         
         Parameters
@@ -89,7 +91,7 @@ class Random(Generator):
         return x
 
 
-class Mutagenesis(Generator):
+class MutagenesisGenerator(Generator):
     """Generator that randomly mutates sequences within a specified window.
     
     Parameters
@@ -122,7 +124,7 @@ class Mutagenesis(Generator):
             torch.manual_seed(seed)
         self.batch_size = batch_size
 
-    def generate(self, x):
+    def __call__(self, x):
         """Generate mutated sequences based on mutation rate.
         
         Parameters
@@ -168,7 +170,7 @@ class Mutagenesis(Generator):
         return torch.cat(x_mut, dim=0).float()
 
 
-class GuidedMutagenesis(Generator):
+class GuidedMutagenesisGenerator(Generator):
     """Generator that uses attribution scores to guide mutations.
     
     Parameters
@@ -207,7 +209,7 @@ class GuidedMutagenesis(Generator):
         self.batch_size = batch_size
         self.dont_repeat_positions = dont_repeat_positions
 
-    def generate(self, x):
+    def __call__(self, x):
         """Generate mutations guided by attribution scores.
         
         Parameters
@@ -299,85 +301,4 @@ class GuidedMutagenesis(Generator):
         return torch.cat(mutations, dim=0)
     
 
-class Sequential(Generator):
-    """Generator that applies multiple generators in sequence.
-    
-    Args:
-        generator_list (list[Generator]): List of generators to apply in sequence
-        seed (int, optional): Random seed for reproducibility. Defaults to None.
-        
-    Example:
-        >>> g1 = Mutagenesis(mut_rate=0.1)
-        >>> g2 = GuidedMutagenesis(attr_method, mut_rate=0.2)
-        >>> seq_gen = Sequential([g1, g2])
-        >>> mutated = seq_gen.generate(sequences)
-    """
-    def __init__(self, generator_list: list[Generator], seed: Union[int, None] = None):
-        self.generator_list = generator_list
-        if seed is not None:
-            torch.manual_seed(seed)
-
-    def generate(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply generators sequentially to input sequences.
-        
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
-                
-        Returns:
-            torch.Tensor: Mutated sequences after applying all generators in sequence,
-                with same shape as input
-        """
-        # Apply each generator in sequence to mutate sequences
-        x_mut = x.clone()
-        for generator in self.generator_list:
-            x_mut = generator.generate(x_mut)
-        return x_mut
-
-
-class MultiGenerator(Generator):
-    """Generator that applies multiple generators in parallel and combines results.
-    
-    Args:
-        generator_list (list[Generator]): List of generators to apply in parallel
-        seed (int, optional): Random seed for reproducibility. Defaults to None.
-        
-    Example:
-        >>> g1 = Mutagenesis(mut_rate=0.1)
-        >>> g2 = GuidedMutagenesis(attr_method, mut_rate=0.2)
-        >>> multi_gen = MultiGenerator([g1, g2])
-        >>> mutated = multi_gen.generate(sequences)  # 2x batch size
-    """
-    def __init__(self, generator_list: list[Generator], seed: Union[int, None] = None):
-        self.generator_list = generator_list
-        if seed is not None:
-            torch.manual_seed(seed)
-
-    def generate(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply generators in parallel and combine results.
-        
-        Args:
-            x (torch.Tensor): Input sequences of shape (N, A, L) where:
-                N is batch size
-                A is alphabet size
-                L is sequence length
-                
-        Returns:
-            torch.Tensor: Combined mutated sequences from all generators,
-                shape (N * n_generators, A, L)
-        """
-        # Get shape parameters
-        N, A, L = x.shape
-        
-        # Apply each generator to the original input
-        outputs = []
-        for generator in self.generator_list:
-            outputs.append(generator.generate(x))
-            
-        # Combine results by concatenating along batch dimension
-        x_mut = torch.cat(outputs, dim=0)
-        
-        return x_mut
 

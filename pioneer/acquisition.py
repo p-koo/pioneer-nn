@@ -1,13 +1,17 @@
 import torch
 from typing import Callable, Union
 from torch.utils.data import TensorDataset, DataLoader
-class Acquisition:
+import sys
+sys.path.append('./')
+from proposer import Proposer
+
+class Acquisition(Proposer):
     """Abstract base class for sequence acquisition.
     
     All acquisition classes should inherit from this class and implement
     the select method.
     """
-    def select(self, x):
+    def __call__(self, x):
         """Select sequences from input batch.
         
         Parameters
@@ -42,7 +46,7 @@ class RandomAcquisition(Acquisition):
         if seed is not None:
             torch.manual_seed(seed)
 
-    def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Randomly select sequences.
         
         Parameters
@@ -86,7 +90,7 @@ class ScoreAcquisition(Acquisition):
         self.batch_size = batch_size
         self.device = device if device is not None else 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Select sequences with highest scores.
         
         Parameters
@@ -168,7 +172,7 @@ class LCMDAcquisition(Acquisition):
         self.TensorFeatureData = TensorFeatureData
         self.select_batch = select_batch
 
-    def select(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def __call__(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Select sequences using LCMD method.
         
         Parameters

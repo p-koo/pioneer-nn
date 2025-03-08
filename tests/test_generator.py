@@ -2,10 +2,10 @@ import torch
 import pytest
 import sys
 sys.path.append('./pioneer')
-from generator import Random, Mutagenesis, GuidedMutagenesis, MultiGenerator, Sequential
-from attribution import Saliency
+from generator import RandomGenerator, MutagenesisGenerator, GuidedMutagenesisGenerator
 from scipy.stats import spearmanr, pearsonr
 from math import floor
+
 @pytest.fixture(params=[
     (10, 4, 100),  # original size
     (10, 4, 50),    # shorter sequence
@@ -52,14 +52,14 @@ def sample_data_big(request):
 def test_random_generator(sample_data, prob, window):
     # Test initialization
     if window is not None:
-        gen = Random(prob=prob, seed=42, mut_window=window)
+        gen = RandomGenerator(prob=prob, seed=42, mut_window=window)
     else:
-        gen = Random(prob=prob, seed=42)
+        gen = RandomGenerator(prob=prob, seed=42)
     assert torch.allclose(gen.prob, torch.tensor(prob)), "Initialization failed"
     
     # Test output shape
     N, A, L = sample_data.shape  # batch size, alphabet size, sequence length
-    out = gen.generate(sample_data)
+    out = gen(sample_data)
     assert out.shape == (N, A, L), "Output shape mismatch"
     assert out.dtype == torch.float32, "Output dtype mismatch"
 
@@ -78,7 +78,7 @@ def test_random_generator(sample_data, prob, window):
         assert torch.allclose(empirical_probs, torch.tensor(prob), atol=0.06), "Empirical probabilities don't match expected probabilities"
     else:
         # Test probabilities
-        large_sample = gen.generate(torch.zeros(1000, A, L))
+        large_sample = gen(torch.zeros(1000, A, L))
         empirical_probs = large_sample.mean(dim=(0,2))
         assert torch.allclose(empirical_probs, torch.tensor(prob), atol=0.05), "Empirical probabilities don't match expected probabilities"
 
@@ -86,13 +86,13 @@ def test_random_generator(sample_data, prob, window):
 @pytest.mark.parametrize("window", [None, (4,45), (2,47)])
 def test_mutagenesis_generator(sample_data, mut_rate, window):
     if window is not None:
-        gen = Mutagenesis(mut_rate=mut_rate, seed=42, mut_window=window)
+        gen = MutagenesisGenerator(mut_rate=mut_rate, seed=42, mut_window=window)
     else:
-        gen = Mutagenesis(mut_rate=mut_rate, seed=42)
+        gen = MutagenesisGenerator(mut_rate=mut_rate, seed=42)
         
     # Test shapes
     N, A, L = sample_data.shape
-    out = gen.generate(sample_data)
+    out = gen(sample_data)
     assert out.shape == (N, A, L), "Output shape mismatch"
     assert out.dtype == torch.float32, "Output dtype mismatch"
 
@@ -161,13 +161,13 @@ def test_guided_mutagenesis(sample_data_big, mut_rate, temp, window):
     N, A, L = x.shape
     model = MockModel(A, L)
     if window is not None:
-        gen = GuidedMutagenesis(model.attribute, mut_rate=mut_rate, temp=temp, seed=42, mut_window=window)
+        gen = GuidedMutagenesisGenerator(model.attribute, mut_rate=mut_rate, temp=temp, seed=42, mut_window=window)
     else:
-        gen = GuidedMutagenesis(model.attribute, mut_rate=mut_rate, temp=temp, seed=42)
+        gen = GuidedMutagenesisGenerator(model.attribute, mut_rate=mut_rate, temp=temp, seed=42)
     
     # Test shapes
     N, A, L = x.shape
-    out = gen.generate(x)
+    out = gen(x)
     assert out.shape == (N, A, L)
     assert out.dtype == torch.float32
     
@@ -222,77 +222,3 @@ def test_guided_mutagenesis(sample_data_big, mut_rate, temp, window):
 
         correlation, _ = spearmanr(emp_flat, attr_flat)
         assert correlation > threshold, "Weak spearman correlation between mutations and attribution scores"
-
-@pytest.mark.parametrize("mut_rate", [0.1, 0.25, 0.5, 0.75, 1.0])
-@pytest.mark.parametrize("window", [None, (2,27), (5,45)])
-def test_MultiGenerator(sample_data, mut_rate, window):
-    x = sample_data
-    # Test MultiGenerator
-    probs = [0.25, 0.25, 0.25, 0.25]
-    if window is not None:
-        multi_gen = MultiGenerator([Random(prob=probs, seed=42, mut_window=window), 
-                                    Mutagenesis(mut_rate=mut_rate, mut_window=window, seed=42)],
-                                    seed=42)
-    else:
-        multi_gen = MultiGenerator([Random(prob=probs, seed=42), 
-                                    Mutagenesis(mut_rate=mut_rate, seed=42)],
-                                    seed=42)
-    
-    out_multi = multi_gen.generate(x)
-
-    # Check shape matches
-    N, A, L = x.shape
-    assert out_multi.shape == (2*N, A, L), "Shape mismatch in MultiGenerator output"
-    
-    # Check one-hot property
-    assert (out_multi.sum(dim=1) == 1).all(), "One-hot property mismatch in MultiGenerator"
-    assert torch.all(torch.logical_or(out_multi == 0, out_multi == 1)), "Elements are not 0 or 1 in MultiGenerator"
-
-    # check that the first half of the output is random and the second half is mutated
-    if window is None:
-        empirical_mut_rate = out_multi[:N].mean(dim=(0,2))
-        assert torch.allclose(empirical_mut_rate, torch.tensor(probs), atol=0.05), "MultiGenerator random mutation rate mismatch"
-        
-        empirical_mut_rate= torch.logical_and((out_multi[N:]==1), (x==0)).any(dim=1).float().mean()
-        expected_mut_rate = torch.tensor(floor(mut_rate*L)/L).float()
-        assert torch.allclose(empirical_mut_rate, expected_mut_rate, atol=0.01), "MultiGenerator mutation rate mismatch"
-    else:
-        # Test no mutations outside window
-        assert torch.equal(x[:,:,:window[0]], out_multi[:N,:,:window[0]]) and torch.equal(x[:,:,:window[0]], out_multi[N:,:,:window[0]]), "Out of window mutations in MultiGenerator"
-        assert torch.equal(x[:,:,window[1]:],out_multi[:N,:,window[1]:]) and torch.equal(x[:,:,window[1]:],out_multi[N:,:,window[1]:]), "Out of window mutations in MultiGenerator"
-        
-        # Test mutation rate in window
-        empirical_mut_rate = out_multi[:N,:,window[0]:window[1]].mean(dim=(0,2))
-        assert torch.allclose(empirical_mut_rate, torch.tensor(probs).float(), atol=0.05), "MultiGenerator random mutation rate mismatch in window"
-        empirical_mut_rate = torch.logical_and((out_multi[N:,:,window[0]:window[1]]==1), (x[:,:,window[0]:window[1]]==0)).any(dim=1).float().mean()
-        expected_mut_rate = torch.tensor(floor(mut_rate*(window[1]-window[0]))/int(window[1]-window[0])).float()
-        assert torch.allclose(empirical_mut_rate, expected_mut_rate, atol=0.01), "MultiGenerator mutation rate mismatch in window"
-
-@pytest.mark.parametrize("mut_rate", [0.1, 0.25, 0.5, 0.75, 1.0])
-@pytest.mark.parametrize("window", [None, (2,27), (5,45)])
-def test_SequentialGenerator(sample_data, mut_rate, window):
-    # Test SequentialGenerator
-    x = sample_data
-    if window is not None:
-        seq_gen = Sequential([Mutagenesis(mut_rate=mut_rate, mut_window=window, seed=42), 
-                                Mutagenesis(mut_rate=mut_rate, mut_window=window, seed=42)],
-                                seed=42) 
-    else:
-        seq_gen = Sequential([Mutagenesis(mut_rate=mut_rate, seed=42), 
-                                Mutagenesis(mut_rate=mut_rate, seed=42)],
-                                seed=42) 
-    out_seq = seq_gen.generate(x)
-
-    # Check shape matches
-    assert out_seq.shape == x.shape, "Shape mismatch in SequentialGenerator output"
-    
-    # Check one-hot property
-    assert (out_seq.sum(dim=1) == 1).all(), "One-hot property mismatch in SequentialGenerator"
-    assert torch.all(torch.logical_or(out_seq == 0, out_seq == 1)), "Elements are not 0 or 1 in SequentialGenerator"
-
-    if window is not None:
-        # Test no mutations outside window
-        assert torch.equal(x[:,:,:window[0]], out_seq[:,:,:window[0]]), "Out of window mutations in SequentialGenerator" 
-        assert torch.equal(x[:,:,window[1]:], out_seq[:,:,window[1]:]), "Out of window mutations in SequentialGenerator"
-
-    

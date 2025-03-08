@@ -37,9 +37,9 @@ def test_random_acquisition(sample_data, target_size, seed):
     N, A, L = sample_data.shape
     if N < target_size:
         with pytest.raises(AssertionError):
-            selected, indices = acq.select(sample_data)
+            selected, indices = acq(sample_data)
     else:
-        selected, indices = acq.select(sample_data)
+        selected, indices = acq(sample_data)
     
         assert selected.shape == (target_size, A, L), "Selected shape mismatch"
         assert indices.shape == (target_size,), "Indices shape mismatch"
@@ -51,11 +51,11 @@ def test_random_acquisition(sample_data, target_size, seed):
         assert torch.all(sample_data[indices] == selected), "Indices do not match selected sequences"
         
         # Test selection is random but consistent with seed
-        selected2, indices2 = acq.select(sample_data)
+        selected2, indices2 = acq(sample_data)
         assert not torch.equal(indices, indices2), "Different random selections with a new selection"
         
         acq_seeded = RandomAcquisition(target_size=target_size, seed=seed)
-        selected3, indices3 = acq_seeded.select(sample_data)
+        selected3, indices3 = acq_seeded(sample_data)
         assert torch.equal(indices, indices3), "Same random selections with the same seed"
 
 @pytest.mark.parametrize("target_size", [1, 10, 15])
@@ -88,9 +88,9 @@ def test_score_acquisition(sample_data, target_size, seed):
     # Test shapes
     if sample_data.shape[0] < target_size:
         with pytest.raises(AssertionError):
-            selected, indices = acq.select(sample_data)
+            selected, indices = acq(sample_data)
     else:
-        selected, indices = acq.select(sample_data)
+        selected, indices = acq(sample_data)
     
         assert selected.shape == (target_size, A, L), "Selected shape mismatch"
         assert indices.shape == (target_size,), "Indices shape mismatch"
