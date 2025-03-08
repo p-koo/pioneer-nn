@@ -56,6 +56,7 @@ class Saliency(AttributionMethod):
     """
     def __init__(self, scorer: Callable):
         self.scorer = scorer
+        
     def attribute(self, x: torch.Tensor) -> torch.Tensor:
         """Calculate attribution scores.
         
@@ -74,13 +75,12 @@ class Saliency(AttributionMethod):
         torch.Tensor
             Attribution scores of shape (N, A, L)
         """
-        
         # Enable gradient tracking for inputs
         x = x.clone().requires_grad_(True)
         
-        # Calculate uncertainty and backpropagate
-        uncertainty = self.model.uncertainty(x)
-        uncertainty.sum().backward()
+        # Calculate score and backpropagate
+        score = self.scorer(x)
+        score.sum().backward()
         
         # Store gradients for this batch
         attr_scores = x.grad.detach().clone()
