@@ -42,7 +42,8 @@ class Random(Generator):
     >>> gen = Random(prob=[0.3, 0.2, 0.2, 0.3])
     >>> random_seqs = gen.generate(sequences)
     """
-    def __init__(self, prob: Union[list[float], None] = None, seed: Union[int, None] = None):
+    def __init__(self, prob: Union[list[float], None] = None, seed: Union[int, None] = None, 
+                 mut_window: Union[tuple[int, int], None] = None):
         # Set nucleotide probabilities (default to uniform)
         if prob is None:
             self.prob = torch.tensor([0.25] * 4)
@@ -52,6 +53,8 @@ class Random(Generator):
             self.prob = prob
         if seed is not None:
             torch.manual_seed(seed)
+
+        self.mut_window = mut_window
 
     def generate(self, x):
         """Generate random sequences using specified probabilities.
@@ -66,12 +69,23 @@ class Random(Generator):
         torch.Tensor
             Random sequences with same shape as input
         """
+        if self.mut_window is None:
+            start = 0
+            end = x.shape[2]
+        else:
+            start = self.mut_window[0]
+            end = self.mut_window[1]
+
         N, A, L = x.shape
-        nt_idx = torch.multinomial(self.prob, N * L, replacement=True)
-        x = torch.zeros(N*L,A, device=x.device)
-        x[torch.arange(N*L),nt_idx] = 1
-        x = x.view(N, L, A)
-        x = x.transpose(1,2)
+        mutable_L = end - start
+        nt_idx = torch.multinomial(self.prob, N * mutable_L, replacement=True)
+        mutatations = torch.zeros(N*mutable_L, A, device=x.device)
+        mutatations[torch.arange(N*mutable_L), nt_idx] = 1
+        mutatations = mutatations.view(N, mutable_L, A)
+        mutatations = mutatations.transpose(1,2)
+
+        x = x.clone()
+        x[:, :, start:end] = mutatations
         return x
 
 
@@ -209,10 +223,11 @@ class GuidedMutagenesis(Generator):
         torch.Tensor
             Mutated sequences with same shape as input
         """
+        
 
         # Set mutation window
         start = 0 if self.mut_window is None else self.mut_window[0]
-        end = L if self.mut_window is None else self.mut_window[1]
+        end = x.shape[2] if self.mut_window is None else self.mut_window[1]
         window_size = end - start
 
         # Create DataLoader for batched processing
@@ -231,7 +246,7 @@ class GuidedMutagenesis(Generator):
             n_mutations = torch.floor(torch.tensor(window_size * self.mut_rate)).long()
             
             # Clone input for mutations
-            batch_mut = batch_x.clone()
+            batch_mut = batch_x.clone().detach()
             
             # Track mutated positions
             if self.dont_repeat_positions:
@@ -241,14 +256,15 @@ class GuidedMutagenesis(Generator):
             # Apply mutations one at a time
             for _ in range(n_mutations):
                 # Get attribution scores
-                attr_map = self.attr_method(batch_mut)
+                attr_map = self.attr_method(batch_x)
                 attr_map = attr_map[:, :, start:end]
                 
                 # Zero out current nucleotide scores and previously mutated positions
                 current_nt_mask = batch_mut[:, :, start:end].bool()
                 attr_map[current_nt_mask] = torch.tensor(float('-inf'))
                 if self.dont_repeat_positions:
-                    attr_map[:, :, mutated_positions] = torch.tensor(float('-inf'))
+                    seq_mask, pos_mask = torch.where(mutated_positions)
+                    attr_map[seq_mask, :, pos_mask] = torch.tensor(float('-inf'))
                 
                 # Apply temperature scaling if specified
                 if self.temp > 0:
