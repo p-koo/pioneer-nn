@@ -1,3 +1,5 @@
+import torch
+
 class Predictor:
     """Abstract base class for prediction methods.
     
@@ -41,7 +43,7 @@ class Scalar(Predictor):
     def __init__(self, task_index=None):
         self.task_index = task_index
 
-    def predict(self, model, x, batch_size=32):
+    def predict(self, model, x):
         """Generate scalar predictions.
         
         Parameters
@@ -61,9 +63,11 @@ class Scalar(Predictor):
        
         pred = model(x)
         # Handle multi-task output if task_index specified
-        if self.task_index is not None:
+        if self.task_index is not None and pred.ndim == 2:
             pred = pred[:, self.task_index]
-            
+        elif self.task_index is not None and pred.ndim == 1:
+            assert self.task_index == 0, 'Task index is >0 but model does not return a multi-task prediction'
+        
         return pred
 
 
@@ -116,12 +120,13 @@ class Profile(Predictor):
         pred = model(x)
             
         # Handle multi-task output if task_index specified
-        if self.task_index is not None:
+        if self.task_index is not None and pred.ndim == 3:
             # Select specific task: (N, L) from (N, T, L)
             pred = pred[:, self.task_index, :]
-        
+        elif self.task_index is not None and pred.ndim == 2:
+            assert self.task_index == 0, 'Task index is >0 but model does not return a multi-task profile'
         # Apply reduction across sequence length dimension to get scalar per sequence
-        pred = self.reduction(pred, dim=2)
+        pred = self.reduction(pred, dim=-1)
 
         return pred
     
