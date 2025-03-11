@@ -98,8 +98,12 @@ class SingleOracle(Oracle):
                 batch_x = batch_x.to(self.device)
                 pred = self.predictor.predict(self.model, batch_x).cpu()
                 predictions.append(pred)
-                
-        return torch.cat(predictions, dim=0)
+
+        predictions = torch.cat(predictions, dim=0)
+        if predictions.ndim == 1:
+            return predictions.unsqueeze(-1)
+        else:
+            return predictions
 
 
 class EnsembleOracle(Oracle):
@@ -133,16 +137,17 @@ class EnsembleOracle(Oracle):
         self.device = device or ('cuda' if torch.cuda.is_available() else 'cpu')
         
         # Initialize and load all models
-        self.models = []
+        models = []
         for path in weight_paths:
             model = model_class(**model_kwargs)
             model.to(self.device)
             model.load_state_dict(torch.load(path, map_location=self.device))
             model.eval()
-            self.models.append(model)
+            models.append(model)
+        self.models = torch.nn.ModuleList(models)
         self.predictor = predictor
 
-    def predict(self, x, batch_size=32):
+    def full_predict(self, x, batch_size=32):
         """Generate ensemble predictions using batched inference.
         
         Parameters
@@ -180,10 +185,69 @@ class EnsembleOracle(Oracle):
                 ])
                 
                 # Average predictions across ensemble and move to CPU
-                pred = batch_preds.mean(dim=0).cpu()
+                pred = batch_preds.cpu()
                 predictions.append(pred)
                 
-        return torch.cat(predictions, dim=0)
-
+        return torch.cat(predictions, dim=1)
+    
+    def predict(self, x, batch_size=32):
+        """Generate ensemble predictions using batched inference.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+        batch_size : int, optional
+            Batch size for processing. Decrease this value if running into 
+            GPU memory issues, by default 32
+                
+        Returns
+        -------
+        torch.Tensor
+            Mean predictions across ensemble of shape (N,) for single task
+            or (N, T) for T tasks
+        """
+        predictions = self.full_predict(x, batch_size).mean(dim=0)
+        if predictions.ndim == 1:
+            return predictions.unsqueeze(-1)
+        else:
+            return predictions
+    
+    
+    def predict_uncertainty(self, x, batch_size=32):
+        """Generate ensemble predictions and uncertainty using batched inference.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+        batch_size : int, optional
+            Batch size for processing. Decrease this value if running into 
+            GPU memory issues, by default 32
+                
+        Returns
+        -------
+        torch.Tensor
+            Mean predictions across ensemble of shape (N,) for single task
+            or (N, T) for T tasks
+        torch.Tensor
+            Uncertainty of shape (N,) for single task
+            or (N, T) for T tasks
+        """
+        predictions = self.full_predict(x, batch_size)
+        means = predictions.mean(dim=0)
+        stds = predictions.std(dim=0)
+        if means.ndim == 1:
+            means = means.unsqueeze(-1)
+        if stds.ndim == 1:
+            stds = stds.unsqueeze(-1)
+        
+        return means, stds
 
     
