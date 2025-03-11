@@ -138,33 +138,74 @@ def test_profile_predictor(sample_data, task_index, n_tasks, reduction):
     
     assert torch.allclose(preds, expected), "Predictions don't match expected values"
 
-# @pytest.mark.parametrize("batch_size", [1, 32, 64])
-# def test_predictor_batching(sample_data, batch_size):
-#     N, A, L = sample_data.shape
-#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+class DeterministicMockModel(torch.nn.Module):
+    """Mock model with deterministic weights for testing predictors"""
+    def __init__(self, A, L, n_tasks=1, output_type='scalar'):
+        super().__init__()
+        self.A = A
+        self.L = L
+        self.n_tasks = n_tasks
+        self.output_type = output_type
+        
+        if output_type == 'scalar':
+            self.linear = torch.nn.Linear(A*L, n_tasks)
+        else:  # profile
+            self.linear = torch.nn.Linear(A*L, n_tasks*L)
+            
+        # Initialize weights and bias deterministically
+        torch.nn.init.ones_(self.linear.weight)
+        torch.nn.init.zeros_(self.linear.bias)
+        
+    def forward(self, x):
+        if self.output_type == 'scalar':
+            return self.linear(x.flatten(start_dim=1))
+        else:
+            return self.linear(x.flatten(start_dim=1)).view(-1, self.n_tasks, self.L)
+
+def test_scalar_predictor_deterministic(sample_data):
+    """Test scalar predictor with deterministic weights"""
+    N, A, L = sample_data.shape
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-#     # Test both predictor types
-#     model_scalar = MockScalarModel(A=A, L=L).to(device)
-#     model_profile = MockProfileModel(A=A, L=L).to(device)
+    # Test single task
+    model = DeterministicMockModel(A=A, L=L, n_tasks=1, output_type='scalar').to(device)
+    predictor = Scalar()
+    preds = predictor.predict(model, sample_data)
     
-#     predictor_scalar = Scalar()
-#     predictor_profile = Profile(reduction=torch.mean)
+    # With all weights=1 and bias=0, output should equal sum of inputs
+    expected = sample_data.sum(dim=(1,2))
+    assert torch.allclose(preds, expected), "Single task predictions don't match expected values"
     
-#     # Get full predictions
-#     preds_scalar = predictor_scalar.predict(model_scalar, sample_data)
-#     preds_profile = predictor_profile.predict(model_profile, sample_data)
+    # Test multi-task with task selection
+    model = DeterministicMockModel(A=A, L=L, n_tasks=3, output_type='scalar').to(device)
+    predictor = Scalar(task_index=1)
+    preds = predictor.predict(model, sample_data)
     
-#     # Get batched predictions
-#     preds_scalar_batched = []
-#     preds_profile_batched = []
-#     for i in range(0, N, batch_size):
-#         batch = sample_data[i:i+batch_size]
-#         preds_scalar_batched.append(predictor_scalar.predict(model_scalar, batch))
-#         preds_profile_batched.append(predictor_profile.predict(model_profile, batch))
+    # Each task should get same prediction since weights are all 1
+    expected = sample_data.sum(dim=(1,2))
+    assert torch.allclose(preds, expected), "Multi-task predictions don't match expected values"
+
+def test_profile_predictor_deterministic(sample_data):
+    """Test profile predictor with deterministic weights"""
+    N, A, L = sample_data.shape
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-#     preds_scalar_batched = torch.cat(preds_scalar_batched)
-#     preds_profile_batched = torch.cat(preds_profile_batched)
+    # Test single task profile
+    model = DeterministicMockModel(A=A, L=L, n_tasks=1, output_type='profile').to(device)
+    predictor = Profile()
+    preds = predictor.predict(model, sample_data)
     
-#     # Test batched results match full results
-#     assert torch.allclose(preds_scalar, preds_scalar_batched), "Scalar batched predictions don't match"
-#     assert torch.allclose(preds_profile, preds_profile_batched), "Profile batched predictions don't match" 
+    # With all weights=1 and bias=0, each position in profile should equal sum across alphabet
+    expected = sample_data.sum(dim=(1,2))
+    assert torch.allclose(preds, expected), "Single task profile predictions don't match"
+    
+    # Test multi-task profile with custom reduction
+    model = DeterministicMockModel(A=A, L=L, n_tasks=3, output_type='profile').to(device)
+    predictor = Profile(reduction=torch.sum, task_index=1)
+    preds = predictor.predict(model, sample_data)
+    
+    # Sum reduction of profile should equal L times sum across alphabet
+    expected = sample_data.sum(dim=1).sum(dim=1) * L
+    assert torch.allclose(preds, expected), "Multi-task profile predictions don't match"
+
+
