@@ -71,7 +71,7 @@ class MCDropout(UncertaintyMethod):
         ])
                 
         # Calculate uncertainty and move to CPU
-        uncertainty = torch.std(preds, dim=0)
+        uncertainty = torch.std(preds, dim=0).squeeze(-1)
                 
         return uncertainty
 
@@ -113,7 +113,7 @@ class DeepEnsemble(UncertaintyMethod):
         ])
                 
         # Calculate uncertainty and move to CPU
-        uncertainty = torch.std(preds, dim=0)
+        uncertainty = torch.std(preds, dim=0).squeeze(-1)
                 
         return uncertainty
     
