@@ -88,13 +88,13 @@ class DeepEnsemble(UncertaintyMethod):
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-    def estimate(self, models: list[torch.nn.Module], x: torch.Tensor) -> torch.Tensor:
+    def estimate(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using model ensemble.
         
         Parameters
         ----------
-        models : list[torch.nn.Module]
-            List of PyTorch models
+        model : torch.nn.Module
+            PyTorch model containing a list of models in its .models attribute
         x : torch.Tensor
             Input sequences of shape (N, A, L)
             
@@ -103,13 +103,13 @@ class DeepEnsemble(UncertaintyMethod):
         torch.Tensor
             Uncertainty scores of shape (N,)
         """
-        [model.eval() for model in models]
+        [model.eval() for model in model.models]
 
         x = x.to(self.device)
                 
         # Get predictions from all models
         preds = torch.stack([
-            model(x) for model in models
+            model(x) for model in model.models
         ])
                 
         # Calculate uncertainty and move to CPU

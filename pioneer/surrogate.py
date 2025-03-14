@@ -88,20 +88,12 @@ class ModelWrapper:
         if self.uncertainty_method is None:
             raise ValueError("No uncertainty method specified")
             
-        # Initialize output tensor on CPU
-        uncertainties = torch.empty(x.size(0))
-        
        
         # Move batch to GPU, get uncertainty, move back to CPU
         x = x.to(self.device)
         uncertainty = self.uncertainty_method.estimate(self.model, x)
-        
-        # Store in the pre-allocated tensor
-        end_idx = start_idx + uncertainty.size(0)
-        uncertainties[start_idx:end_idx] = uncertainty
-        start_idx = end_idx
             
-        return uncertainties
+        return uncertainty
 
 
 
