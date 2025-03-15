@@ -4,7 +4,7 @@ import sys
 sys.path.append('./pioneer')
 from oracle import SingleOracle, EnsembleOracle
 from predictor import Scalar
-
+import pytorch_lightning as pl
 @pytest.fixture(params=[
     (10, 4, 100),  # original size
     (10, 4, 50),   # shorter sequence
@@ -42,26 +42,56 @@ class MockModel(torch.nn.Module):
         
     def forward(self, x):
         return self.linear(x.flatten(start_dim=1))
+    
+class MockLightningModel(pl.LightningModule):
+    def __init__(self, A, L, n_tasks=1):
+        super().__init__()
+        self.A = A
+        self.L = L
+        self.n_tasks = n_tasks
+        self.linear = torch.nn.Linear(A*L, n_tasks)
+        # Initialize weights for predictable behavior
+        torch.nn.init.ones_(self.linear.weight)
+        torch.nn.init.zeros_(self.linear.bias)
+        self.save_hyperparameters()
+        
+    def forward(self, x):
+        return self.linear(x.flatten(start_dim=1))
+    
+    def training_step(self, batch, batch_idx):
+        x, y = batch
 
 @pytest.mark.parametrize("n_tasks", [1, 3])
 @pytest.mark.parametrize("batch_size", [1, 32, 64])
-def test_single_oracle(sample_data, n_tasks, batch_size, tmp_path):
+@pytest.mark.parametrize("model_type", ['pytorch', 'lightning'])
+def test_single_oracle(sample_data, n_tasks, batch_size, tmp_path, model_type):
     N, A, L = sample_data.shape
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
     # Create temporary weight file
     weight_path = tmp_path / "model_weights.pt"
-    model = MockModel(A=A, L=L, n_tasks=n_tasks)
-    torch.save(model.state_dict(), weight_path)
+    if model_type == 'pytorch':
+        model_class = MockModel
+        model = model_class(A=A, L=L, n_tasks=n_tasks)
+        torch.save(model.state_dict(), weight_path)
+    elif model_type == 'lightning':
+        model_class = MockLightningModel
+        model = model_class(A=A, L=L, n_tasks=n_tasks)
+        trainer = pl.Trainer(max_epochs=1)
+        trainer.strategy.connect(model)
+        trainer.save_checkpoint(weight_path)
+    else:
+        raise ValueError(f"Invalid model type: {model_type}, must be 'pytorch' or 'lightning'")
     
     # Initialize oracle
     predictor = Scalar(task_index=0 if n_tasks > 1 else None)
     oracle = SingleOracle(
-        model_class=MockModel,
+        model_class=model_class,
         model_kwargs={'A': A, 'L': L, 'n_tasks': n_tasks},
         weight_path=weight_path,
         predictor=predictor,
-        device=device
+        device=device,
+        model_type=model_type
     )
     
     # Test predictions
@@ -79,7 +109,8 @@ def test_single_oracle(sample_data, n_tasks, batch_size, tmp_path):
 @pytest.mark.parametrize("n_models", [3, 5])
 @pytest.mark.parametrize("n_tasks", [1, 3])
 @pytest.mark.parametrize("batch_size", [1, 32, 64])
-def test_ensemble_oracle(sample_data, n_models, n_tasks, batch_size, tmp_path):
+@pytest.mark.parametrize("model_type", ['pytorch', 'lightning'])
+def test_ensemble_oracle(sample_data, n_models, n_tasks, batch_size, tmp_path, model_type):
     N, A, L = sample_data.shape
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
@@ -87,20 +118,32 @@ def test_ensemble_oracle(sample_data, n_models, n_tasks, batch_size, tmp_path):
     weight_paths = []
     for i in range(n_models):
         weight_path = tmp_path / f"model_{i}_weights.pt"
-        model = MockModel(A=A, L=L, n_tasks=n_tasks)
-        # Add small variance to weights for each model
-        model.linear.weight.data += torch.randn_like(model.linear.weight.data) * 0.1
-        torch.save(model.state_dict(), weight_path)
+        if model_type == 'pytorch':
+            model_class = MockModel
+            model = model_class(A=A, L=L, n_tasks=n_tasks)
+            # Add small variance to weights for each model
+            model.linear.weight.data += torch.randn_like(model.linear.weight.data) * 0.1
+            torch.save(model.state_dict(), weight_path)
+        elif model_type == 'lightning':
+            model_class = MockLightningModel
+            model = model_class(A=A, L=L, n_tasks=n_tasks)
+            model.linear.weight.data += torch.randn_like(model.linear.weight.data) * 0.1
+            trainer = pl.Trainer(max_epochs=1)
+            trainer.strategy.connect(model)
+            trainer.save_checkpoint(weight_path)
+        else:
+            raise ValueError(f"Invalid model type: {model_type}, must be 'pytorch' or 'lightning'")
         weight_paths.append(weight_path)
     
     # Initialize oracle
     predictor = Scalar(task_index=0 if n_tasks > 1 else None)
     oracle = EnsembleOracle(
-        model_class=MockModel,
+        model_class=model_class,
         model_kwargs={'A': A, 'L': L, 'n_tasks': n_tasks},
         weight_paths=weight_paths,
         predictor=predictor,
-        device=device
+        device=device,
+        model_type=model_type
     )
     
     # Test predictions
@@ -126,39 +169,60 @@ def test_ensemble_oracle(sample_data, n_models, n_tasks, batch_size, tmp_path):
     assert torch.allclose(predictions, predictions_batched), "Batched predictions don't match"
 
 @pytest.mark.parametrize("n_models", [3, 5])
-def test_ensemble_variance(sample_data, n_models, tmp_path):
+@pytest.mark.parametrize("model_type", ['pytorch', 'lightning'])
+def test_ensemble_variance(sample_data, n_models, model_type, tmp_path):
     """Test that ensemble predictions have higher variance with more diverse weights"""
     N, A, L = sample_data.shape
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
     
     def create_ensemble(variance):
         weight_paths = []
         for i in range(n_models):
             weight_path = tmp_path / f"model_{i}_weights_{variance}.pt"
-            model = MockModel(A=A, L=L)
-            model.linear.weight.data += torch.randn_like(model.linear.weight.data) * variance
-            torch.save(model.state_dict(), weight_path)
+            if model_type == 'pytorch':
+                model_class = MockModel
+                model = model_class(A=A, L=L)
+                model.linear.weight.data += torch.randn_like(model.linear.weight.data) * variance
+                torch.save(model.state_dict(), weight_path)
+            elif model_type == 'lightning':
+                model_class = MockLightningModel
+                model = model_class(A=A, L=L)
+                model.linear.weight.data += torch.randn_like(model.linear.weight.data) * variance
+                trainer = pl.Trainer(max_epochs=1)
+                trainer.strategy.connect(model)
+                trainer.save_checkpoint(weight_path)
+            else:
+                raise ValueError(f"Invalid model type: {model_type}, must be 'pytorch' or 'lightning'")
             weight_paths.append(weight_path)
         return weight_paths
     
     # Create two ensembles with different weight variances
+    if model_type == 'pytorch':
+        model_class = MockModel
+    elif model_type == 'lightning':
+        model_class = MockLightningModel
+    else:
+        raise ValueError(f"Invalid model type: {model_type}, must be 'pytorch' or 'lightning'")
     low_var = 0.1
     high_var = 5
     predictor = Scalar()
     oracle_low_var = EnsembleOracle(
-        model_class=MockModel,
+        model_class=model_class,
         model_kwargs={'A': A, 'L': L},
         weight_paths=create_ensemble(low_var),
         predictor=predictor,
-        device=device
+        device=device,
+        model_type=model_type
     )
     
     oracle_high_var = EnsembleOracle(
-        model_class=MockModel,
+        model_class=model_class,
         model_kwargs={'A': A, 'L': L},
         weight_paths=create_ensemble(high_var),
         predictor=predictor,
-        device=device
+        device=device,
+        model_type=model_type
     )
     
     # Get predictions
