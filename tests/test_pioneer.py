@@ -6,8 +6,8 @@ sys.path.append('./pioneer')
 from pioneer import PIONEER
 from surrogate import ModelWrapper
 from oracle import SingleOracle
-from generator import Random as RandomGenerator
-from acquisition import Random as RandomAcquisition
+from generator import RandomGenerator
+from acquisition import RandomAcquisition
 from predictor import Scalar
 
 @pytest.fixture(params=[
@@ -44,6 +44,7 @@ class MockModel(torch.nn.Module):
     def forward(self, x):
         return self.linear(x.flatten(start_dim=1))
 
+
 class MockLightningModel(pl.LightningModule):
     """Mock Lightning model for testing PIONEER"""
     def __init__(self, A, L):
@@ -63,10 +64,14 @@ class MockLightningModel(pl.LightningModule):
         return torch.optim.Adam(self.parameters())
 
 @pytest.mark.parametrize("batch_size", [1, 32])
-@pytest.mark.parametrize("val_split", [0.0, 0.2])
-def test_pioneer_initialization(sample_data, batch_size, val_split):
+def test_pioneer_initialization(sample_data, batch_size, tmp_path):
     N, A, L = sample_data.shape
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Create and save model weights
+    weight_path = tmp_path / "model_weights.pt"
+    model = MockModel(A=A, L=L)
+    torch.save(model.state_dict(), weight_path)
     
     # Create components
     model = MockLightningModel(A, L)
@@ -74,12 +79,11 @@ def test_pioneer_initialization(sample_data, batch_size, val_split):
     oracle = SingleOracle(
         model_class=MockModel,
         model_kwargs={'A': A, 'L': L},
-        weight_path=None,  # Mock oracle doesn't need weights
+        weight_path=weight_path,  # Use the temporary weight file
         predictor=Scalar()
     )
     generator = RandomGenerator()
     acquisition = RandomAcquisition(target_size=batch_size)
-    trainer = pl.Trainer(max_epochs=1)
     
     # Initialize PIONEER
     pioneer = PIONEER(
@@ -87,21 +91,25 @@ def test_pioneer_initialization(sample_data, batch_size, val_split):
         oracle=oracle,
         generator=generator,
         acquisition=acquisition,
-        trainer=trainer,
         batch_size=batch_size
     )
     
     assert pioneer.batch_size == batch_size, "Batch size not set correctly"
-    assert pioneer.model == model_wrapper, "Model wrapper not set correctly"
+    assert pioneer.model == model_wrapper.model, "Model not set correctly"
+    assert pioneer.surrogate == model_wrapper, "Surrogate not set correctly"
     assert pioneer.oracle == oracle, "Oracle not set correctly"
     assert pioneer.generator == generator, "Generator not set correctly"
     assert pioneer.acquisition == acquisition, "Acquisition not set correctly"
-    assert pioneer.trainer == trainer, "Trainer not set correctly"
 
 @pytest.mark.parametrize("n_cycles", [1, 2])
-def test_pioneer_training_loop(sample_data, n_cycles):
+def test_pioneer_training_loop_with_trainer(sample_data, n_cycles, tmp_path):
     N, A, L = sample_data.shape
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Create and save model weights
+    weight_path = tmp_path / "model_weights.pt"
+    model = MockModel(A=A, L=L)
+    torch.save(model.state_dict(), weight_path)
     
     # Create initial training data
     y = torch.randn(N, 1)  # Random labels
@@ -112,26 +120,71 @@ def test_pioneer_training_loop(sample_data, n_cycles):
     oracle = SingleOracle(
         model_class=MockModel,
         model_kwargs={'A': A, 'L': L},
-        weight_path=None,
+        weight_path=weight_path,  # Use the temporary weight file
         predictor=Scalar()
     )
     generator = RandomGenerator()
     acquisition = RandomAcquisition(target_size=N//2)
-    trainer = pl.Trainer(max_epochs=1)
     
     pioneer = PIONEER(
         model=model_wrapper,
         oracle=oracle,
         generator=generator,
         acquisition=acquisition,
-        trainer=trainer,
         batch_size=32
     )
     
     # Run training cycles
     x_train, y_train = sample_data, y
     for cycle in range(n_cycles):
-        x_new, y_new = pioneer.run_cycle(x_train, y_train)
+        x_new, y_new = pioneer.run_cycle(x_train, y_train, trainer_factory=lambda: pl.Trainer(max_epochs=1, logger=False, enable_checkpointing=False))
+        
+        # Test shapes
+        assert x_new.shape[0] == N//2, f"Cycle {cycle}: Wrong number of selected sequences"
+        assert x_new.shape[1:] == (A, L), f"Cycle {cycle}: Wrong sequence dimensions"
+        assert y_new.shape[0] == N//2, f"Cycle {cycle}: Wrong number of labels"
+        
+        # Update training data
+        x_train = torch.cat([x_train, x_new])
+        y_train = torch.cat([y_train, y_new])
+
+@pytest.mark.parametrize("n_cycles", [1, 2])
+def test_pioneer_training_loop_with_training_fnc(sample_data, n_cycles, tmp_path):
+    N, A, L = sample_data.shape
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Create and save model weights
+    weight_path = tmp_path / "model_weights.pt"
+    model = MockModel(A=A, L=L)
+    torch.save(model.state_dict(), weight_path)
+    
+    # Create initial training data
+    y = torch.randn(N, 1)  # Random labels
+    
+    # Create components
+    model = MockLightningModel(A, L)
+    model_wrapper = ModelWrapper(model=model, predictor=Scalar())
+    oracle = SingleOracle(
+        model_class=MockModel,
+        model_kwargs={'A': A, 'L': L},
+        weight_path=weight_path,  # Use the temporary weight file
+        predictor=Scalar()
+    )
+    generator = RandomGenerator()
+    acquisition = RandomAcquisition(target_size=N//2)
+    
+    pioneer = PIONEER(
+        model=model_wrapper,
+        oracle=oracle,
+        generator=generator,
+        acquisition=acquisition,
+        batch_size=32
+    )
+    
+    # Run training cycles
+    x_train, y_train = sample_data, y
+    for cycle in range(n_cycles):
+        x_new, y_new = pioneer.run_cycle(x_train, y_train, training_fnc_enclosure=lambda: pl.Trainer(max_epochs=1, logger=False, enable_checkpointing=False).fit)
         
         # Test shapes
         assert x_new.shape[0] == N//2, f"Cycle {cycle}: Wrong number of selected sequences"
@@ -145,6 +198,11 @@ def test_pioneer_training_loop(sample_data, n_cycles):
 def test_pioneer_save_weights(sample_data, tmp_path):
     N, A, L = sample_data.shape
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # Create and save model weights
+    weight_path = tmp_path / "model_weights.pt"
+    model = MockModel(A=A, L=L)
+    torch.save(model.state_dict(), weight_path)
     
     # Create components
     model = MockLightningModel(A, L)
@@ -152,19 +210,17 @@ def test_pioneer_save_weights(sample_data, tmp_path):
     oracle = SingleOracle(
         model_class=MockModel,
         model_kwargs={'A': A, 'L': L},
-        weight_path=None,
+        weight_path=weight_path,
         predictor=Scalar()
     )
     generator = RandomGenerator()
     acquisition = RandomAcquisition(target_size=N//2)
-    trainer = pl.Trainer(max_epochs=1)
     
     pioneer = PIONEER(
         model=model_wrapper,
         oracle=oracle,
         generator=generator,
         acquisition=acquisition,
-        trainer=trainer,
         batch_size=32
     )
     
@@ -179,9 +235,14 @@ def test_pioneer_save_weights(sample_data, tmp_path):
     assert cycle_path.exists(), "Weight file with cycle number not created"
 
 @pytest.mark.parametrize("val_split", [0.0, 0.2])
-def test_pioneer_dataloader_creation(sample_data, val_split):
+def test_pioneer_dataloader_creation(sample_data, val_split, tmp_path):
     N, A, L = sample_data.shape
     y = torch.randn(N, 1)  # Random labels
+    
+    # Create and save model weights
+    weight_path = tmp_path / "model_weights.pt"
+    model = MockModel(A=A, L=L)
+    torch.save(model.state_dict(), weight_path)
     
     # Create PIONEER instance
     model = MockLightningModel(A, L)
@@ -190,12 +251,11 @@ def test_pioneer_dataloader_creation(sample_data, val_split):
         oracle=SingleOracle(
             model_class=MockModel,
             model_kwargs={'A': A, 'L': L},
-            weight_path=None,
+            weight_path=weight_path,  # Use the temporary weight file
             predictor=Scalar()
         ),
         generator=RandomGenerator(),
         acquisition=RandomAcquisition(target_size=N//2),
-        trainer=pl.Trainer(max_epochs=1),
         batch_size=32
     )
     
@@ -205,5 +265,5 @@ def test_pioneer_dataloader_creation(sample_data, val_split):
     assert train_loader.batch_size == 32, "Wrong batch size"
     
     # Test with None inputs
-    none_loader = pioneer._get_dataloader(None, None)
-    assert none_loader is None, "None inputs should return None" 
+    with pytest.raises(AssertionError):
+        pioneer._get_dataloader(None, None)

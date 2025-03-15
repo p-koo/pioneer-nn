@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
-class ModelWrapper:
+class ModelWrapper(torch.nn.Module):
     """Model wrapper for predictions and uncertainty estimation.
     
     Parameters
@@ -22,10 +22,14 @@ class ModelWrapper:
     ... )
     """
     def __init__(self, model, predictor, uncertainty_method=None):
+        super().__init__()
         self.model = model
         self.predictor = predictor
         self.uncertainty_method = uncertainty_method
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.predict(x)
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """Generate predictions using batched inference.
