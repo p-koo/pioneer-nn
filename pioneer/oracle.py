@@ -46,6 +46,11 @@ class SingleOracle(Oracle):
     device : str, optional
         Device to run model on ('cuda' or 'cpu').
         Defaults to 'cuda' if available, by default None
+    model_type : str, optional
+        Type of model to use ('pytorch' or 'lightning').
+        Defaults to 'pytorch'
+        if 'lightning' is used, the model will be loaded from a checkpoint file
+        if 'pytorch' is used, the model will be loaded from a state_dict file
             
     Examples
     --------
@@ -128,6 +133,11 @@ class EnsembleOracle(Oracle):
     device : str, optional
         Device to run models on ('cuda' or 'cpu').
         Defaults to 'cuda' if available, by default None
+    model_type : str, optional
+        Type of model to use ('pytorch' or 'lightning').
+        Defaults to 'pytorch'
+        if 'lightning' is used, the model will be loaded from a checkpoint file
+        if 'pytorch' is used, the model will be loaded from a state_dict file
             
     Examples
     --------
