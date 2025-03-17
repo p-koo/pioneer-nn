@@ -32,7 +32,7 @@ class PIONEER:
     ...     acquisition=UncertaintySelector(n_select=1000),
     ... )
     """
-    def __init__(self, model: ModelWrapper, oracle: SingleOracle, generator: Generator, acquisition: Acquisition, batch_size: int = 32, num_workers: int = 0):
+    def __init__(self, model: ModelWrapper, oracle: SingleOracle, generator: Generator, acquisition: Acquisition, batch_size: int = 32, num_workers: int = 0, cold_start: bool = False):
         self.surrogate = model
         self.model = self.surrogate.model
         self.oracle = oracle
@@ -40,10 +40,15 @@ class PIONEER:
         self.acquisition = acquisition
         self.batch_size = batch_size
         self.num_workers = num_workers
-        # Store initial model state
-        self.initial_state = {k: v.clone() for k, v in self.model.state_dict().items()}
+        self.cold_start = cold_start
+        if self.cold_start:
+            # Store initial model state
+            self.initial_state = {k: v.clone() for k, v in self.model.state_dict().items()}
 
-    def train_model(self,  trainer:Optional[pl.Trainer]=None, train_fnc:Optional[Callable]=None, train_loader:Optional[torch.utils.data.DataLoader]=None,x:Optional[torch.Tensor]=None, y:Optional[torch.Tensor]=None, val_loader:Optional[torch.utils.data.DataLoader]=None, val_x:Optional[torch.Tensor]=None, val_y:Optional[torch.Tensor]=None, **train_kwargs):
+    def train_model(self,  trainer:Optional[pl.Trainer]=None, train_fnc:Optional[Callable]=None, 
+                    train_loader:Optional[torch.utils.data.DataLoader]=None,x:Optional[torch.Tensor]=None, 
+                    y:Optional[torch.Tensor]=None, val_loader:Optional[torch.utils.data.DataLoader]=None, 
+                    val_x:Optional[torch.Tensor]=None, val_y:Optional[torch.Tensor]=None, **train_kwargs):
         """Train surrogate model on data.
         
         Parameters
@@ -72,8 +77,9 @@ class PIONEER:
             Validation labels of shape (N,), by default None
             Used if val_loader is None
         """
-        # Reset model weights
-        self.model.load_state_dict(self.initial_state)
+        if self.cold_start:
+            # Reset model weights
+            self.model.load_state_dict(self.initial_state)
         
         # Create fresh dataloaders
         assert train_loader is not None or (x is not None and y is not None), 'train_loader or x and y must not be None'

@@ -267,3 +267,98 @@ def test_pioneer_dataloader_creation(sample_data, val_split, tmp_path):
     # Test with None inputs
     with pytest.raises(AssertionError):
         pioneer._get_dataloader(None, None)
+
+@pytest.mark.parametrize("cold_start", [True, False])
+def test_pioneer_cold_start(sample_data, tmp_path, cold_start):
+    N, A, L = sample_data.shape
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    # Create and save model weights
+    weight_path = tmp_path / "model_weights.pt"
+    model = MockModel(A=A, L=L)
+    torch.save(model.state_dict(), weight_path)
+    
+    # Create components
+    model = MockLightningModel(A, L)
+    initial_weights = {k: v.clone() for k, v in model.state_dict().items()}
+    
+    model_wrapper = ModelWrapper(model=model, predictor=Scalar())
+    oracle = SingleOracle(
+        model_class=MockModel,
+        model_kwargs={'A': A, 'L': L},
+        weight_path=weight_path,
+        predictor=Scalar()
+    )
+    generator = RandomGenerator()
+    acquisition = RandomAcquisition(target_size=N//2)
+    
+    # Initialize PIONEER with cold_start option
+    pioneer = PIONEER(
+        model=model_wrapper,
+        oracle=oracle,
+        generator=generator,
+        acquisition=acquisition,
+        batch_size=32,
+        cold_start=cold_start
+    )
+    
+    # Run a training cycle
+    weights = []
+    def logging_trainer(model, train_loader, val_loader):
+        weights.append({k: v.clone() for k, v in model.state_dict().items()})
+        pl.Trainer(max_epochs=1, logger=False, enable_checkpointing=False).fit(model, train_loader, val_loader)
+
+    y = torch.randn(N, 1)  # Random labels
+    x_new, y_new = pioneer.run_cycle(
+        sample_data, 
+        y, 
+        training_fnc_enclosure=lambda:logging_trainer
+    )
+    
+    final_weights = {k: v.clone() for k, v in model.state_dict().items()}
+    
+    # Test weight reset behavior
+    if not cold_start:
+        assert not hasattr(pioneer, 'initial_state'), "warm start should not store initial weights"
+        assert all([torch.allclose(initial_weights[k], weights[0][k]) 
+                      for k in initial_weights.keys()]), "In the first cycle weights shouldnt be different yet"
+        
+        # Run another cycle to test weight reset
+        x_new2, y_new2 = pioneer.run_cycle(
+            torch.cat([sample_data, x_new]), 
+            torch.cat([y, y_new]),
+            training_fnc_enclosure=lambda:logging_trainer
+        )
+        
+        
+        
+        # Test that weights were reset to initial values before second training
+        assert not all(torch.allclose(initial_weights[k], weights[1][k]) 
+                      for k in initial_weights.keys()), "In the second cycle inital weights should be different from original weights"
+        
+        # Test that weights were reset to initial values before second training
+        assert all(torch.allclose(final_weights[k], weights[1][k]) 
+                      for k in initial_weights.keys()), "In the second cycle final weights should be the same as the weights after the first cycle"
+        
+    else:
+        assert hasattr(pioneer, 'initial_state'), "cold start should store initial weights"
+        assert all(torch.allclose(initial_weights[k], weights[0][k]) 
+                      for k in initial_weights.keys()), "In the first cycle weights shouldnt be different yet"
+        
+        # Run another cycle to test weight reset
+        x_new2, y_new2 = pioneer.run_cycle(
+            torch.cat([sample_data, x_new]), 
+            torch.cat([y, y_new]),
+            training_fnc_enclosure=lambda:logging_trainer
+        )
+        
+        
+        
+        # Test that weights were reset to initial values before second training
+        assert all(torch.allclose(initial_weights[k], weights[1][k]) 
+                      for k in initial_weights.keys()), "In the second cycle inital weights should be the same as original weights"
+        
+        # Test that weights were reset to initial values before second training
+        assert not all(torch.allclose(final_weights[k], weights[1][k]) 
+                      for k in initial_weights.keys()), "In the second cycle final weights should be the different from the weights after the first cycle"
+        
