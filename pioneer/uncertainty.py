@@ -78,6 +78,8 @@ class MCDropout(UncertaintyMethod):
                 
         return uncertainty
 
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return self.estimate(x)
 
 class DeepEnsemble(UncertaintyMethod):
     """Uncertainty estimation using Deep Ensembles.
@@ -120,4 +122,5 @@ class DeepEnsemble(UncertaintyMethod):
                 
         return uncertainty
     
-
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return self.estimate(x)
