@@ -193,6 +193,7 @@ class EnsembleOracle(Oracle):
         predictions = []
         
         # Create DataLoader for batched processing
+        print(f"ACDEBUG:{x.shape}")
         dataset = TensorDataset(x)
         loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
         
