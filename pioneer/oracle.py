@@ -107,7 +107,7 @@ class SingleOracle(Oracle):
             for batch_x, in loader:
                 # Move batch to GPU, get predictions, move back to CPU
                 batch_x = batch_x.to(self.device)
-                pred = self.predictor.predict(self.model, batch_x).cpu()
+                pred = self.predictor(self.model, batch_x).cpu()
                 predictions.append(pred)
 
         predictions = torch.cat(predictions, dim=0)

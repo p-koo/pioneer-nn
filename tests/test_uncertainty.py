@@ -52,7 +52,7 @@ def test_mc_dropout(sample_data, n_samples, dropout_rate):
     uncertainty = MCDropout(n_samples=n_samples)
     
     # Get uncertainty estimates
-    uncertainties = uncertainty.estimate(model, sample_data)
+    uncertainties = uncertainty(model, sample_data)
     
     # Test output shape
     assert uncertainties.shape == (N,), "Uncertainty shape mismatch"
@@ -66,8 +66,8 @@ def test_mc_dropout(sample_data, n_samples, dropout_rate):
         model_low = MockDropoutModel(A=A, L=L, dropout_rate=0.1).to(device)
         model_high = MockDropoutModel(A=A, L=L, dropout_rate=0.9).to(device)
         
-        uncertainties_low = uncertainty.estimate(model_low, sample_data)
-        uncertainties_high = uncertainty.estimate(model_high, sample_data)
+        uncertainties_low = uncertainty(model_low, sample_data)
+        uncertainties_high = uncertainty(model_high, sample_data)
         
         assert uncertainties_low.mean() < uncertainties_high.mean(), "Higher dropout rate should lead to higher uncertainty"
 
@@ -99,7 +99,7 @@ def test_deep_ensemble(sample_data, n_models, model_variance):
     uncertainty = DeepEnsemble()
     
     # Get uncertainty estimates
-    uncertainties = uncertainty.estimate(models, sample_data)
+    uncertainties = uncertainty(models, sample_data)
     
     # Test output shape
     assert uncertainties.shape == (N,), "Uncertainty shape mismatch"
@@ -113,38 +113,8 @@ def test_deep_ensemble(sample_data, n_models, model_variance):
         models_low = MockEnsembleModel(A=A, L=L, n_models=n_models, variance=0.01).to(device)
         models_high = MockEnsembleModel(A=A, L=L, n_models=n_models, variance=1.0).to(device)
         
-        uncertainties_low = uncertainty.estimate(models_low, sample_data)
-        uncertainties_high = uncertainty.estimate(models_high, sample_data)
+        uncertainties_low = uncertainty(models_low, sample_data)
+        uncertainties_high = uncertainty(models_high, sample_data)
         
         assert uncertainties_low.mean() < uncertainties_high.mean(), "Higher model variance should lead to higher uncertainty"
 
-# @pytest.mark.parametrize("batch_size", [1, 32, 64])
-# def test_uncertainty_batching(sample_data, batch_size):
-#     N, A, L = sample_data.shape
-#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
-#     # Test both uncertainty methods
-#     dropout_model = MockDropoutModel(A=A, L=L).to(device)
-#     ensemble_models = MockEnsembleModel(A=A, L=L).to(device)
-    
-#     mc_dropout = MCDropout(n_samples=20)
-#     deep_ensemble = DeepEnsemble()
-    
-#     # Get full uncertainties
-#     uncertainties_dropout = mc_dropout.estimate(dropout_model, sample_data)
-#     uncertainties_ensemble = deep_ensemble.estimate(ensemble_models, sample_data)
-    
-#     # Get batched uncertainties
-#     uncertainties_dropout_batched = []
-#     uncertainties_ensemble_batched = []
-#     for i in range(0, N, batch_size):
-#         batch = sample_data[i:i+batch_size]
-#         uncertainties_dropout_batched.append(mc_dropout.estimate(dropout_model, batch))
-#         uncertainties_ensemble_batched.append(deep_ensemble.estimate(ensemble_models, batch))
-    
-#     uncertainties_dropout_batched = torch.cat(uncertainties_dropout_batched)
-#     uncertainties_ensemble_batched = torch.cat(uncertainties_ensemble_batched)
-    
-#     # Test batched results match full results (within numerical tolerance)
-#     assert torch.allclose(uncertainties_dropout, uncertainties_dropout_batched, rtol=1e-4), "MC Dropout batched uncertainties don't match"
-#     assert torch.allclose(uncertainties_ensemble, uncertainties_ensemble_batched, rtol=1e-4), "Deep Ensemble batched uncertainties don't match" 

@@ -72,7 +72,7 @@ def test_scalar_predictor(sample_data, task_index, n_tasks):
     predictor = Scalar(task_index=task_index)
     
     # Get predictions
-    preds = predictor.predict(model, sample_data)
+    preds = predictor(model, sample_data)
     
     # Test output shape
     if task_index is not None:
@@ -105,7 +105,7 @@ def test_profile_predictor(sample_data, task_index, n_tasks, reduction):
     predictor = Profile(reduction=reduction, task_index=task_index)
     
     # Get predictions
-    preds = predictor.predict(model, sample_data)
+    preds = predictor(model, sample_data)
     
     # Test that output is a a torch tensor
     assert isinstance(preds, torch.Tensor), f'Prediction is type {type(preds)} not torch.Tensor'
@@ -170,7 +170,7 @@ def test_scalar_predictor_deterministic(sample_data):
     # Test single task
     model = DeterministicMockModel(A=A, L=L, n_tasks=1, output_type='scalar').to(device)
     predictor = Scalar()
-    preds = predictor.predict(model, sample_data)
+    preds = predictor(model, sample_data)
     
     # With all weights=1 and bias=0, output should equal sum of inputs
     expected = sample_data.sum(dim=(1,2))
@@ -179,7 +179,7 @@ def test_scalar_predictor_deterministic(sample_data):
     # Test multi-task with task selection
     model = DeterministicMockModel(A=A, L=L, n_tasks=3, output_type='scalar').to(device)
     predictor = Scalar(task_index=1)
-    preds = predictor.predict(model, sample_data)
+    preds = predictor(model, sample_data)
     
     # Each task should get same prediction since weights are all 1
     expected = sample_data.sum(dim=(1,2))
@@ -193,7 +193,7 @@ def test_profile_predictor_deterministic(sample_data):
     # Test single task profile
     model = DeterministicMockModel(A=A, L=L, n_tasks=1, output_type='profile').to(device)
     predictor = Profile()
-    preds = predictor.predict(model, sample_data)
+    preds = predictor(model, sample_data)
     
     # With all weights=1 and bias=0, each position in profile should equal sum across alphabet
     expected = sample_data.sum(dim=(1,2))
@@ -202,7 +202,7 @@ def test_profile_predictor_deterministic(sample_data):
     # Test multi-task profile with custom reduction
     model = DeterministicMockModel(A=A, L=L, n_tasks=3, output_type='profile').to(device)
     predictor = Profile(reduction=torch.sum, task_index=1)
-    preds = predictor.predict(model, sample_data)
+    preds = predictor(model, sample_data)
     
     # Sum reduction of profile should equal L times sum across alphabet
     expected = sample_data.sum(dim=1).sum(dim=1) * L
