@@ -28,6 +28,9 @@ class UncertaintyMethod:
         """
         pass
 
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return self.estimate(x)
+
 
 class MCDropout(UncertaintyMethod):
     """Uncertainty estimation using Monte Carlo Dropout.
