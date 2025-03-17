@@ -86,3 +86,6 @@ class Saliency(AttributionMethod):
         attr_scores = x.grad.detach().clone()
             
         return attr_scores
+
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return self.attribute(x)

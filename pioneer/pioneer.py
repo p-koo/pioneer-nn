@@ -43,7 +43,7 @@ class PIONEER:
         # Store initial model state
         self.initial_state = {k: v.clone() for k, v in self.model.state_dict().items()}
 
-    def train_model(self,  trainer:Optional[pl.Trainer]=None, train_fnc:Optional[Callable]=None, train_loader:Optional[torch.utils.data.DataLoader]=None,x:Optional[torch.Tensor]=None, y:Optional[torch.Tensor]=None, val_loader:Optional[torch.utils.data.DataLoader]=None, val_x:Optional[torch.Tensor]=None, val_y:Optional[torch.Tensor]=None):
+    def train_model(self,  trainer:Optional[pl.Trainer]=None, train_fnc:Optional[Callable]=None, train_loader:Optional[torch.utils.data.DataLoader]=None,x:Optional[torch.Tensor]=None, y:Optional[torch.Tensor]=None, val_loader:Optional[torch.utils.data.DataLoader]=None, val_x:Optional[torch.Tensor]=None, val_y:Optional[torch.Tensor]=None, **train_kwargs):
         """Train surrogate model on data.
         
         Parameters
@@ -86,7 +86,7 @@ class PIONEER:
         if trainer is not None:
             trainer.fit(self.model, train_loader, val_loader)
         else:
-            train_fnc(self.model, train_loader, val_loader)
+            train_fnc(self.model, train_loader, val_loader, **train_kwargs)
 
     def generate_sequences(self, x:torch.Tensor) -> torch.Tensor:
         """Generate new sequence proposals.
