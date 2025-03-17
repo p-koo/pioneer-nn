@@ -28,9 +28,6 @@ class UncertaintyMethod:
         """
         pass
 
-    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
-        return self.estimate(x)
-
 
 class MCDropout(UncertaintyMethod):
     """Uncertainty estimation using Monte Carlo Dropout.
@@ -78,9 +75,6 @@ class MCDropout(UncertaintyMethod):
                 
         return uncertainty
 
-    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
-        return self.estimate(x)
-
 class DeepEnsemble(UncertaintyMethod):
     """Uncertainty estimation using Deep Ensembles.
     
@@ -121,6 +115,3 @@ class DeepEnsemble(UncertaintyMethod):
         uncertainty = torch.std(preds, dim=0).squeeze(-1)
                 
         return uncertainty
-    
-    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
-        return self.estimate(x)
