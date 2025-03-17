@@ -203,7 +203,7 @@ class EnsembleOracle(Oracle):
                 
                 # Get predictions from all models
                 batch_preds = torch.stack([
-                    self.predictor.predict(model, batch_x)
+                    self.predictor(model, batch_x)
                     for model in self.models
                 ])
                 

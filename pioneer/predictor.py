@@ -6,7 +6,7 @@ class Predictor:
     All predictor classes should inherit from this class and implement
     the predict method.
     """
-    def predict(self, model, x, batch_size=32):
+    def __call__(self, model, x, batch_size=32):
         """Generate predictions for input sequences.
         
         Parameters
@@ -43,7 +43,7 @@ class Scalar(Predictor):
     def __init__(self, task_index=None):
         self.task_index = task_index
 
-    def predict(self, model, x):
+    def __call__(self, model, x):
         """Generate scalar predictions.
         
         Parameters
@@ -93,7 +93,7 @@ class Profile(Predictor):
         self.reduction = reduction if reduction is not None else torch.mean
         self.task_index = task_index
         
-    def predict(self, model, x):
+    def __call__(self, model, x):
         """Generate predictions and reduce profiles to scalars.
         
         Parameters

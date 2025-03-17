@@ -8,7 +8,7 @@ class UncertaintyMethod:
     All uncertainty methods should inherit from this class and implement
     the estimate method.
     """
-    def estimate(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates for input sequences.
         
         Parameters
@@ -46,7 +46,7 @@ class MCDropout(UncertaintyMethod):
         self.n_samples = n_samples
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-    def estimate(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using MC Dropout.
         
         Parameters
@@ -88,7 +88,7 @@ class DeepEnsemble(UncertaintyMethod):
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-    def estimate(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using model ensemble.
         
         Parameters

@@ -56,14 +56,14 @@ class ModelWrapper(torch.nn.Module):
         if isinstance(self.model, list):
             # Handle ensemble of models
             pred = torch.stack([
-                self.predictor.predict(m, x)
+                self.predictor(m, x)
                 for m in self.model
             ])
             # Average predictions across ensemble and move to CPU
             pred = pred.mean(dim=0)
         else:
             # Single model prediction
-            pred = self.predictor.predict(self.model, x)
+            pred = self.predictor(self.model, x)
         
                 
         return pred
@@ -95,7 +95,7 @@ class ModelWrapper(torch.nn.Module):
        
         # Move batch to GPU, get uncertainty, move back to CPU
         x = x.to(self.device)
-        uncertainty = self.uncertainty_method.estimate(self.model, x)
+        uncertainty = self.uncertainty_method(self.model, x)
             
         return uncertainty
 
