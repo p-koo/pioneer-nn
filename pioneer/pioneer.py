@@ -178,7 +178,7 @@ class PIONEER:
         self.train_model(trainer=trainer, train_fnc=training_fnc, x=x, y=y, val_x=val_x, val_y=val_y)
         generated_x = self.generate_sequences(x)
         selected_x, selected_idx = self.select_sequences(generated_x)
-        selected_y = self.get_oracle_labels(selected_x[0])
+        selected_y = self.get_oracle_labels(selected_x)
         return selected_x, selected_y
 
     def _get_dataloader(self, x:torch.Tensor, y:torch.Tensor) -> torch.utils.data.DataLoader:
