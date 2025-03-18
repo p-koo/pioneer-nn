@@ -233,8 +233,9 @@ class PoolBasedAcquisition(Acquisition):
         -------
         tuple[torch.Tensor, torch.Tensor]
             Tuple containing:
-            - pool_idxs: Indices of remaining sequences in pool after removing training sequences
-            - pool: Cleaned pool sequences with training sequences removed
+            - pool_idxs: Indices of sequences in pool that are not in training data
+            - pool: Pool sequences excluding those in training data, shape (M, A, L) where M is
+              the number of remaining sequences after filtering
         
         Raises
         ------
