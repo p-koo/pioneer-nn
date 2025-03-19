@@ -1,11 +1,11 @@
 import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 import sys
 sys.path.append('./')
 from proposer import Proposer
-
+from acquisition import Acquisition
 
 
 class Generator(Proposer):
@@ -302,3 +302,94 @@ class GuidedMutagenesisGenerator(Generator):
     
 
 
+class PoolBasedGenerator(Generator):
+    """Generator that selects sequences from a pool.
+    
+    Attributes:
+        selector: Acquisition or callable function for selecting sequences from pool
+        pool: Pool sequences in one-hot encoding of shape (N, A, L)
+        prior_idx: Optional tensor of indices mapping pool sequences to training data
+        check_prior_idx: Whether to verify prior indices match training data
+    """
+    def __init__(self, selector:Union[Acquisition,Callable[[torch.Tensor],torch.Tensor]], 
+                 pool:torch.Tensor,
+                 prior_idx:Optional[torch.Tensor]=None, 
+                 check_prior_idx:bool=True) -> None:
+        self.selector = selector
+        self.prior_idx = prior_idx
+        self.pool = pool
+        self.check_prior_idx=check_prior_idx
+    
+    
+    def clean_pool_idx(self, x:torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Clean pool using indices.
+        
+        Removes training sequences from the pool by filtering out sequences with indices
+        matching the prior_idx attribute.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Training sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+            
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Tuple containing:
+            - pool_idxs: Indices of sequences in pool that are not in training data
+            - pool: Pool sequences excluding those in training data, shape (M, A, L) where M is
+              the number of remaining sequences after filtering
+        
+        Raises
+        ------
+        AssertionError
+            If prior_idx does not correctly map pool sequences to training sequences
+        """
+        if self.check_prior_idx:
+            prior_sort_mask = torch.argsort(self.prior_idx)
+            x_grab = self.pool[self.prior_idx]
+            assert (x[prior_sort_mask]==x_grab[prior_sort_mask]).all(), 'Prior IDX doesnt match X_train'
+
+        #need to grab pool inverted
+        rm_idx = torch.ones(len(self.pool), dtype=torch.bool)
+        rm_idx[self.prior_idx] = False
+        pool_idxs = torch.where(rm_idx)[0]
+        pool = self.pool[pool_idxs]  
+        return(pool_idxs,pool)
+    
+    def __call__(self, x:torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Select sequences from pool.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+            (Note: This parameter is unused but kept for interface consistency)
+            
+        Returns
+        -------
+        tuple[torch.Tensor, torch.Tensor]
+            Tuple containing:
+            - Selected sequences from pool of shape (target_size, A, L)
+            - Indices of selected sequences in original pool
+        """
+        if self.prior_idx is not None:
+            pool_idxs,clean_pool = self.clean_pool_idx(x)
+        else:
+            clean_pool = x  
+
+        selected_x, selected_clean_pool_idx = self.selector(clean_pool)
+
+        if self.prior_idx is not None:
+            self.selected_idx_in_pool = pool_idxs[selected_clean_pool_idx]
+        else:
+            self.selected_idx_in_pool = selected_clean_pool_idx
+            
+
+        return(selected_x)

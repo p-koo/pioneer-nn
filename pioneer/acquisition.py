@@ -1,5 +1,5 @@
 import torch
-from typing import Callable, Union
+from typing import Callable, Union, Optional
 from torch.utils.data import TensorDataset, DataLoader
 import sys
 sys.path.append('./')
@@ -194,3 +194,4 @@ class LCMDAcquisition(Acquisition):
                                 base_kernel=self.base_kernel, kernel_transforms=self.kernel_transforms) 
 
         return x[idx], idx
+    

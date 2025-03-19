@@ -2,10 +2,10 @@ import torch
 import pytest
 import sys
 sys.path.append('./pioneer')
-from generator import RandomGenerator, MutagenesisGenerator, GuidedMutagenesisGenerator
+from generator import RandomGenerator, MutagenesisGenerator, GuidedMutagenesisGenerator, PoolBasedGenerator
 from scipy.stats import spearmanr, pearsonr
 from math import floor
-
+from acquisition import RandomAcquisition, ScoreAcquisition
 @pytest.fixture(params=[
     (10, 4, 100),  # original size
     (10, 4, 50),    # shorter sequence
@@ -222,3 +222,168 @@ def test_guided_mutagenesis(sample_data_big, mut_rate, temp, window):
 
         correlation, _ = spearmanr(emp_flat, attr_flat)
         assert correlation > threshold, "Weak spearman correlation between mutations and attribution scores"
+@pytest.mark.parametrize("pool_size", [100, 200])
+@pytest.mark.parametrize("target_size", [10, 20])
+def test_pool_based_acquisition_random(sample_data, pool_size, target_size):
+    """Test PoolBasedAcquisition with RandomAcquisition selector"""
+    N, A, L = sample_data.shape
+    
+    # Create larger pool of sequences
+    pool = torch.zeros(pool_size, A, L)
+    for i in range(pool_size):
+        nt_idx = torch.randint(0, A, (L,))
+        pool[i, nt_idx, torch.arange(L)] = 1
+
+    # Insert training sequences at known positions
+    prior_idx = torch.randperm(pool_size)[:N]
+    pool[prior_idx] = sample_data
+    
+    # Create random selector
+    random_selector = RandomAcquisition(target_size=target_size)
+    
+    # Create pool-based acquisition
+    pool_generator = PoolBasedGenerator(
+        selector=random_selector,
+        pool=pool,
+        prior_idx=prior_idx,
+        check_prior_idx=True
+    )
+    
+    # Select sequences
+    selected_x = pool_generator(sample_data)
+    selected_idx = pool_generator.selected_idx_in_pool
+    
+    # Test output shapes
+    assert selected_x.shape == (target_size, A, L), "Wrong shape for selected sequences"
+    assert selected_idx.shape == (target_size,), "Wrong shape for selected indices"
+    
+    # Test selected sequences are from pool
+    idx_sorted = torch.argsort(selected_idx)
+    assert torch.all(selected_x[idx_sorted] == pool[selected_idx[idx_sorted]]), "Selected sequences don't match pool sequences"
+
+@pytest.mark.parametrize("pool_size", [100, 200])
+def test_pool_based_acquisition_with_prior_idx(sample_data, pool_size):
+    """Test PoolBasedAcquisition with prior indices"""
+    N, A, L = sample_data.shape
+    target_size = N // 2
+    
+    # Create pool that includes training sequences
+    pool = torch.zeros(pool_size, A, L)
+    for i in range(pool_size):
+        nt_idx = torch.randint(0, A, (L,))
+        pool[i, nt_idx, torch.arange(L)] = 1
+    
+    # Insert training sequences at known positions
+    prior_idx = torch.randperm(pool_size)[:N]
+    pool[prior_idx] = sample_data
+    
+    # Create random selector
+    random_selector = RandomAcquisition(target_size=target_size)
+    
+    # Create pool-based acquisition
+    pool_generator = PoolBasedGenerator(
+        selector=random_selector,
+        pool=pool,
+        prior_idx=prior_idx,
+        check_prior_idx=True
+    )
+    
+    # Select sequences
+    selected_x = pool_generator(sample_data)
+    selected_idx = pool_generator.selected_idx_in_pool
+    
+    # Test that selected sequences are not from training data
+    for idx in selected_idx:
+        assert idx not in prior_idx, "Selected sequence from training data"
+    
+    # Test that selected sequences are valid one-hot encodings
+    assert torch.all(selected_x.sum(dim=1) == 1), "Selected sequences are not one-hot encoded"
+
+    # Test that selected sequences are from pool
+    idx_sorted = torch.argsort(selected_idx)
+    assert torch.all(selected_x[idx_sorted] == pool[selected_idx[idx_sorted]]), "Selected sequences don't match pool sequences"
+
+@pytest.mark.parametrize("scorer_type", ['uncertainty', 'prediction'])
+def test_pool_based_acquisition_with_score_selector(sample_data, scorer_type):
+    """Test PoolBasedAcquisition with ScoreAcquisition selector"""
+    N, A, L = sample_data.shape
+    pool_size = 100
+    target_size = N // 2
+    
+    # Create pool
+    pool = torch.zeros(pool_size, A, L)
+    for i in range(pool_size):
+        nt_idx = torch.randint(0, A, (L,))
+        pool[i, nt_idx, torch.arange(L)] = 1
+
+    cat_pool = torch.cat([sample_data, pool])
+    assert cat_pool.shape[0] == N+pool_size, 'Cat failed'
+    # pool_idx = torch.arange(len(pool))
+    scramble_idx = torch.randperm(len(cat_pool))
+    cat_pool = cat_pool[scramble_idx]
+    prior_idx = torch.argsort(scramble_idx)[:len(sample_data)]
+
+    assert torch.all(sample_data==cat_pool[prior_idx]), 'Prior idx doesnt recover sample data'
+    # Create mock scorer
+    def mock_scorer(x):
+        if scorer_type == 'uncertainty':
+            return torch.rand(len(x))  # Random uncertainty scores
+        else:
+            return torch.sum(x, dim=(1,2))  # Sum of one-hot values
+    
+    # Create score selector
+    score_selector = ScoreAcquisition(
+        target_size=target_size,
+        scorer=mock_scorer,
+        batch_size=32
+    )
+    
+    # Create pool-based acquisition
+    pool_generator = PoolBasedGenerator(
+        selector=score_selector,
+        pool=cat_pool,
+        prior_idx=prior_idx,
+        check_prior_idx=True
+    )
+    
+    # Select sequences
+    selected_x = pool_generator(sample_data)
+    selected_idx = pool_generator.selected_idx_in_pool
+    
+    # Test output shapes
+    assert selected_x.shape == (target_size, A, L), "Wrong shape for selected sequences"
+    assert selected_idx.shape == (target_size,), "Wrong shape for selected indices"
+    
+    # Test selected sequences are from pool
+    idx_sorted = torch.argsort(selected_idx)
+    assert torch.all(selected_x[idx_sorted] == cat_pool[selected_idx[idx_sorted]]), "Selected sequences don't match pool sequences"
+
+def test_pool_based_acquisition_invalid_prior_idx(sample_data):
+    """Test PoolBasedAcquisition with invalid prior indices"""
+    N, A, L = sample_data.shape
+    pool_size = 100
+    target_size = N // 2
+    
+    # Create pool
+    pool = torch.zeros(pool_size, A, L)
+    for i in range(pool_size):
+        nt_idx = torch.randint(0, A, (L,))
+        pool[i, nt_idx, torch.arange(L)] = 1
+    
+    # Create invalid prior indices (pointing to wrong sequences)
+    prior_idx = torch.randperm(pool_size)[:N]
+    
+    # Create random selector
+    random_selector = RandomAcquisition(target_size=target_size)
+    
+    # Create pool-based acquisition
+    pool_generator = PoolBasedGenerator(
+        selector=random_selector,
+        pool=pool,
+        prior_idx=prior_idx,
+        check_prior_idx=True
+    )
+    
+    # Test that using invalid prior indices raises error
+    with pytest.raises(AssertionError):
+        selected_x = pool_generator(sample_data)
