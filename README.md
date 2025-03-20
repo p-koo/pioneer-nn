@@ -12,42 +12,42 @@ pip install pioneer-nn
 ## Core Components
 
 ### 1. Sequence Generation (`generator.py`)
-- `generator.Random`: Creates sequences based on nucleotide probabilities
-- `generator.Mutagenesis`: Random mutations within specified windows
-- `generator.GuidedMutagenesis`: Attribution-guided mutations
-- `generator.Sequential`: Applies multiple generators in sequence
-- `generator.MultiGenerator`: Applies generators in parallel
+- `RandomGenerator`: Creates sequences based on nucleotide probabilities
+- `MutagenesisGenerator`: Random mutations within specified windows
+- `GuidedMutagenesisGenerator`: Attribution-guided mutations within specified windows
+- `PoolBasedGenerator`: Selects sequences from a predefined pool based on a scoring function
+- `SequentialProposer`: Applies multiple generators in sequence
+- `MultiProposer`: Applies generators in parallel
 
 ### 2. Sequence Selection (`acquisition.py`)
-- `acquisition.Random`: Random sequence sampling
-- `acquisition.Uncertainty`: Selection based on model uncertainty
-- `acquisition.LCMD`: Low-Confidence-Maximum-Distance selection
+- `RandomAcquisition`: Random sequence sampling
+- `ScoreAcquisition`: Selection based on arbitrary scoring function
+- `LCMDAcquisition`: Linear Centered Maximum Distance selection
 
 ### 3. Attribution Methods (`attribution.py`)
-- `attribution.UncertaintySaliency`: Gradients of uncertainty w.r.t inputs
-- `attribution.ActivitySaliency`: Gradients of predictions w.r.t inputs
+- `Saliency`: Gradient-based attribution scores for input sequences based on a scorer function
 
 ### 4. Prediction Methods (`predictor.py`)
-- `predictor.Scalar`: For models outputting scalar values
-- `predictor.Profile`: For models outputting position-wise profiles
+- `Scalar`: For models outputting scalar values
+- `Profile`: For models outputting position-wise profiles
 - Supports multi-task outputs through task indexing
 
 ### 5. Uncertainty Estimation (`uncertainty.py`)
-- `uncertainty.MCDropout`: Monte Carlo Dropout sampling
-- `uncertainty.DeepEnsemble`: Ensemble-based uncertainty
+- `MCDropout`: Monte Carlo Dropout sampling
+- `DeepEnsemble`: Ensemble-based uncertainty
 
 ### 6. Oracle Interface (`oracle.py`)
-- `oracle.OracleSingle`: Single model predictions
-- `oracle.OracleEnsemble`: Ensemble model predictions with uncertainty
+- `SingleOracle`: Single model predictions
+- `EnsembleOracle`: Ensemble model predictions with uncertainty
 
 ### 7. Model Wrapping (`surrogate.py`)
-- `surrogate.ModelWrapper`: Unified interface for predictions and uncertainty
+- `ModelWrapper`: Unified interface for predictions and uncertainty
 
 ## Quick Start
 
 ```python
 from pioneer import (
-    pioneer,
+    PIONEER,
     generator, 
     acquisition,
     uncertainty,
@@ -63,11 +63,21 @@ uncertainty = uncertainty.MCDropout(n_samples=20)
 wrapper = surrogate.ModelWrapper(model, predictor, uncertainty)
 
 # Initialize PIONEER
-pioneer = pioneer.PIONEER(
+pioneer = PIONEER(
     model=wrapper,
-    oracle=oracle.OracleSingle(oracle_model),
-    generator=generator.Mutagenesis(mut_rate=0.1),
-    selector=acquisition.Uncertainty(target_size=1000, surrogate_model=wrapper)
+    oracle=oracle.SingleOracle(
+        model_class=OracleModel,
+        model_kwargs={'hidden_dim': 256},
+        weight_path='oracle_weights.pt',
+        predictor=predictor.Scalar()
+    ),
+    generator=generator.MutagenesisGenerator(mut_rate=0.1),
+    acquisition=acquisition.ScoreAcquisition(
+        target_size=1000,
+        scorer=wrapper.uncertainty
+    ),
+    batch_size=32,
+    cold_start=True
 )
 
 # Run optimization cycle
@@ -75,32 +85,32 @@ new_seqs, new_labels = pioneer.run_cycle(
     x=train_seqs,
     y=train_labels,
     val_x=val_seqs,
-    val_y=val_labels
+    val_y=val_labels,
+    trainer_factory=lambda: pl.Trainer(max_epochs=10)
 )
 ```
 
 ## Advanced Usage
 
-### Guided Sequence Generation
+### Sequential Generation
 ```python
-from pioneer import generator, attribution
+from pioneer import generator
 
-attr = attribution.UncertaintySaliency(model)
-gen = generator.GuidedMutagenesis(
-    attr_method=attr,
-    mut_rate=0.1,
-    mut_window=(10, 20),
-    temp=1.0
-)
+gen = generator.SequentialProposer([
+    generator.RandomGenerator(prob=[0.3, 0.2, 0.2, 0.3]),
+    generator.MutagenesisGenerator(mut_rate=0.1)
+])
 ```
 
 ### Ensemble Predictions
 ```python
-from pioneer import oracle
+from pioneer import oracle, predictor
 
-oracle_model = oracle.OracleEnsemble(
-    model=base_model,
-    weight_paths=['model1.h5', 'model2.h5', 'model3.h5']
+oracle_model = oracle.EnsembleOracle(
+    model_class=YourModel,
+    model_kwargs={'hidden_dim': 256},
+    weight_paths=['model1.pt', 'model2.pt', 'model3.pt'],
+    predictor=predictor.Scalar()
 )
 ```
 
@@ -113,7 +123,7 @@ pred = predictor.Scalar(task_index=0)  # Select first task
 
 # For profile outputs
 pred = predictor.Profile(
-    reduction=lambda x: x.mean(dim=-1),  # Custom reduction
+    reduction=torch.mean,  # Custom reduction
     task_index=1  # Select second task
 )
 ```
@@ -131,6 +141,7 @@ pred = predictor.Profile(
 ## Dependencies
 
 - PyTorch ≥ 1.12
+- PyTorch Lightning
 
 ## Citation
 
