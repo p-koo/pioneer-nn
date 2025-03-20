@@ -1,43 +1,70 @@
 from .pioneer import PIONEER
-from .oracle import SingleOracle, EnsembleOracle
-from .generator import Random as RandomGenerator
-from .generator import Mutagenesis, GuidedMutagenesis
-from .acquisition import Random as RandomAcquisition
-from .acquisition import Uncertainty
-from .attribution import UncertaintySaliency, ActivitySaliency
-from .predictor import Scalar, Profile
+from .proposer import (
+    SequentialProposer,
+    MultiProposer
+)
+from .generator import (
+    RandomGenerator,
+    MutagenesisGenerator, 
+    GuidedMutagenesisGenerator,
+    PoolBasedGenerator
+)
+from .acquisition import (
+    RandomAcquisition,
+    ScoreAcquisition,
+    LCMDAcquisition
+)
+from .attribution import Saliency
+from .predictor import (
+    Scalar,
+    Profile
+)
+from .uncertainty import (
+    MCDropout,
+    DeepEnsemble
+)
+from .oracle import (
+    SingleOracle,
+    EnsembleOracle
+)
 from .surrogate import ModelWrapper
-from .uncertainty import MCDropout, DeepEnsemble
+from .utils import upsample
 
 __all__ = [
-    # Main framework
+    # Main class
     'PIONEER',
     
-    # Oracles
-    'SingleOracle',
-    'EnsembleOracle',
-    
-    # Generators
-    'Random',
-    'Mutagenesis',
-    'GuidedMutagenesis',
+    # Generators and Proposers
+    'RandomGenerator',
+    'MutagenesisGenerator',
+    'GuidedMutagenesisGenerator',
+    'PoolBasedGenerator',
+    'SequentialProposer',
+    'MultiProposer',
     
     # Acquisition methods
     'RandomAcquisition',
-    'UncertaintyAcquisition',
+    'ScoreAcquisition',
+    'LCMDAcquisition',
     
     # Attribution methods
-    'UncertaintySaliency',
-    'ActivitySaliency',
+    'Saliency',
     
     # Predictors
     'Scalar',
     'Profile',
     
-    # Model wrapper
-    'ModelWrapper',
-    
     # Uncertainty methods
     'MCDropout',
     'DeepEnsemble',
+    
+    # Oracles
+    'SingleOracle',
+    'EnsembleOracle',
+    
+    # Model wrapper
+    'ModelWrapper',
+    
+    # Utilities
+    'upsample'
 ] 
