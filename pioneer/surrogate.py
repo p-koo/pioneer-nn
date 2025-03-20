@@ -4,12 +4,16 @@ from torch.utils.data import DataLoader, TensorDataset
 class ModelWrapper(torch.nn.Module):
     """Model wrapper for predictions and uncertainty estimation.
     
+    This class wraps a PyTorch model (or ensemble of models) to provide a unified interface
+    for making predictions and estimating uncertainties. It handles model loading, device 
+    placement, and batched inference.
+    
     Parameters
     ----------
     model : torch.nn.Module or list[torch.nn.Module]
-        Model or list of models for ensemble
+        Single model or list of models for ensemble prediction
     predictor : Predictor
-        Prediction method for generating outputs
+        Prediction method for generating outputs from model(s)
     uncertainty_method : UncertaintyMethod, optional
         Method for estimating prediction uncertainty, by default None
         
@@ -20,6 +24,8 @@ class ModelWrapper(torch.nn.Module):
     ...     predictor=ScalarPredictor(),
     ...     uncertainty_method=MCDropout()
     ... )
+    >>> predictions = model.predict(sequences)
+    >>> uncertainties = model.uncertainty(sequences)
     """
     def __init__(self, model, predictor, uncertainty_method=None):
         super().__init__()
@@ -34,19 +40,22 @@ class ModelWrapper(torch.nn.Module):
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """Generate predictions using batched inference.
         
+        This method handles both single model and ensemble prediction. For ensembles,
+        predictions are averaged across all models.
+        
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
             Model predictions of shape (N,) for single task
-            or (N, T) for T tasks
+            or (N, T) for T tasks, where T is number of tasks
         """
         
        
@@ -71,18 +80,22 @@ class ModelWrapper(torch.nn.Module):
     def uncertainty(self, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using batched inference.
         
+        This method uses the specified uncertainty estimation method (e.g. MC Dropout,
+        ensemble variance) to compute uncertainty scores for each input sequence.
+        
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,)
+            Uncertainty scores of shape (N,), where higher values indicate
+            greater prediction uncertainty
             
         Raises
         ------
@@ -101,5 +114,3 @@ class ModelWrapper(torch.nn.Module):
 
 
 
-
-        

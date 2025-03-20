@@ -12,7 +12,7 @@ class Generator(Proposer):
     """Abstract base class for sequence generators.
     
     All generator classes should inherit from this class and implement
-    the generate method.
+    the __call__ method.
     """
     def __call__(self, x):
         """Generate modified sequences from input sequences.
@@ -20,7 +20,10 @@ class Generator(Proposer):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
@@ -38,11 +41,14 @@ class RandomGenerator(Generator):
         Probabilities for each nucleotide, by default [0.25, 0.25, 0.25, 0.25]
     seed : int, optional
         Random seed for reproducibility, by default None
+    mut_window : tuple[int, int], optional
+        Start and end positions for mutation window.
+        If None, generates random sequences for entire length, by default None
         
     Examples
     --------
-    >>> gen = Random(prob=[0.3, 0.2, 0.2, 0.3])
-    >>> random_seqs = gen.generate(sequences)
+    >>> gen = RandomGenerator(prob=[0.3, 0.2, 0.2, 0.3])
+    >>> random_seqs = gen(sequences)
     """
     def __init__(self, prob: Union[list[float], None] = None, seed: Union[int, None] = None, 
                  mut_window: Union[tuple[int, int], None] = None):
@@ -64,12 +70,17 @@ class RandomGenerator(Generator):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Random sequences with same shape as input
+            Random sequences with same shape as input, where sequences are randomly
+            generated within the mutation window (if specified) according to the
+            nucleotide probabilities
         """
         if self.mut_window is None:
             start = 0
@@ -97,7 +108,7 @@ class MutagenesisGenerator(Generator):
     Parameters
     ----------
     mut_rate : float
-        Mutation rate between 0 and 1
+        Mutation rate between 0 and 1, representing fraction of positions to mutate
     mut_window : tuple[int, int], optional
         Start and end positions for mutation window.
         If None, mutates entire sequence, by default None
@@ -109,8 +120,8 @@ class MutagenesisGenerator(Generator):
             
     Examples
     --------
-    >>> gen = Mutagenesis(mut_rate=0.1, mut_window=(10, 20))
-    >>> mutated = gen.generate(sequences)
+    >>> gen = MutagenesisGenerator(mut_rate=0.1, mut_window=(10, 20))
+    >>> mutated = gen(sequences)
     """
     def __init__(self, mut_rate: float = 0.1, 
                  mut_window: Union[tuple[int, int], None] = None, 
@@ -130,12 +141,16 @@ class MutagenesisGenerator(Generator):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Mutated sequences with same shape as input
+            Mutated sequences with same shape as input, where mut_rate fraction of positions
+            within the mutation window (if specified) are randomly mutated to different nucleotides
         """
         N_total, A, L = x.shape
 
@@ -176,22 +191,28 @@ class GuidedMutagenesisGenerator(Generator):
     Parameters
     ----------
     attr_method : callable
-        Method that returns attribution scores for sequences
+        Method that returns attribution scores for sequences, indicating which positions
+        and nucleotides are most important for the model's predictions
     mut_rate : float
-        Mutation rate between 0 and 1
+        Mutation rate between 0 and 1, representing fraction of positions to mutate
     mut_window : tuple[int, int], optional
         Start and end positions for mutation window.
         If None, mutates entire sequence, by default None
     temp : float or str, optional
-        Temperature for softmax. Use 'neg_inf' for deterministic
-        selection or positive float for sampling, by default -1
+        Temperature for softmax. Use 'neg_inf' for deterministic selection 
+        or positive float for sampling. Higher values make selection more random,
+        by default -1
     seed : int, optional
         Random seed for reproducibility, by default None
+    batch_size : int, optional
+        Batch size for processing. Decrease if running into memory issues, by default 32
+    dont_repeat_positions : bool, optional
+        If True, prevents mutating the same position multiple times, by default True
             
     Examples
     --------
-    >>> gen = GuidedMutagenesis(attr_method, mut_rate=0.1, temp=1.0)
-    >>> guided_mutations = gen.generate(sequences)
+    >>> gen = GuidedMutagenesisGenerator(attr_method, mut_rate=0.1, temp=1.0)
+    >>> guided_mutations = gen(sequences)
     """
     def __init__(self, attr_method: Callable, mut_rate: float = 0.1, 
                  mut_window: Union[tuple[int, int], None] = None, 
@@ -215,15 +236,18 @@ class GuidedMutagenesisGenerator(Generator):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
-        batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
                 
         Returns
         -------
         torch.Tensor
-            Mutated sequences with same shape as input
+            Mutated sequences with same shape as input, where mutations are guided by
+            attribution scores. The probability of mutation at each position is determined
+            by the attribution scores and temperature parameter. Higher attribution scores
+            and lower temperatures lead to more targeted mutations.
         """
         
 
@@ -303,13 +327,22 @@ class GuidedMutagenesisGenerator(Generator):
 
 
 class PoolBasedGenerator(Generator):
-    """Generator that selects sequences from a pool.
+    """Generator that selects sequences from a pre-defined pool.
     
-    Attributes:
-        selector: Acquisition or callable function for selecting sequences from pool
-        pool: Pool sequences in one-hot encoding of shape (N, A, L)
-        prior_idx: Optional tensor of indices mapping pool sequences to training data
-        check_prior_idx: Whether to verify prior indices match training data
+    This generator uses an acquisition function or selector to choose sequences from
+    a pool of candidates, optionally excluding sequences that are already in the 
+    training data.
+    
+    Parameters
+    ----------
+    selector : Union[Acquisition, Callable[[torch.Tensor], torch.Tensor]]
+        Function or Acquisition object that selects sequences from the pool
+    pool : torch.Tensor
+        Pool of candidate sequences in one-hot encoding of shape (N, A, L)
+    prior_idx : Optional[torch.Tensor], optional
+        Tensor of indices mapping pool sequences to training data, by default None
+    check_prior_idx : bool, optional
+        Whether to verify prior indices match training data, by default True
     """
     def __init__(self, selector:Union[Acquisition,Callable[[torch.Tensor],torch.Tensor]], 
                  pool:torch.Tensor,
@@ -322,10 +355,7 @@ class PoolBasedGenerator(Generator):
     
     
     def clean_pool_idx(self, x:torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Clean pool using indices.
-        
-        Removes training sequences from the pool by filtering out sequences with indices
-        matching the prior_idx attribute.
+        """Clean pool by removing sequences that appear in training data.
         
         Parameters
         ----------
@@ -338,10 +368,8 @@ class PoolBasedGenerator(Generator):
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            Tuple containing:
             - pool_idxs: Indices of sequences in pool that are not in training data
-            - pool: Pool sequences excluding those in training data, shape (M, A, L) where M is
-              the number of remaining sequences after filtering
+            - pool: Filtered pool sequences excluding those in training data
         
         Raises
         ------
@@ -361,7 +389,7 @@ class PoolBasedGenerator(Generator):
         return(pool_idxs,pool)
     
     def __call__(self, x:torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """Select sequences from pool.
+        """Select sequences from the pool using the selector function.
         
         Parameters
         ----------
@@ -370,14 +398,13 @@ class PoolBasedGenerator(Generator):
             N is batch size,
             A is alphabet size,
             L is sequence length
-            (Note: This parameter is unused but kept for interface consistency)
+            Used to filter pool if prior_idx is provided
             
         Returns
         -------
-        tuple[torch.Tensor, torch.Tensor]
-            Tuple containing:
-            - Selected sequences from pool of shape (target_size, A, L)
-            - Indices of selected sequences in original pool
+        torch.Tensor
+            Selected sequences from the pool, chosen by the selector function
+            after filtering out training sequences if prior_idx is provided
         """
         if self.prior_idx is not None:
             pool_idxs,clean_pool = self.clean_pool_idx(x)

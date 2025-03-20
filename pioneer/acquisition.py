@@ -9,7 +9,7 @@ class Acquisition(Proposer):
     """Abstract base class for sequence acquisition.
     
     All acquisition classes should inherit from this class and implement
-    the select method.
+    the __call__ method.
     """
     def __call__(self, x):
         """Select sequences from input batch.
@@ -17,7 +17,10 @@ class Acquisition(Proposer):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
@@ -39,7 +42,8 @@ class RandomAcquisition(Acquisition):
         
     Examples
     --------
-    >>> x, idx = Random(target_size=32)
+    >>> acquisition = RandomAcquisition(target_size=32)
+    >>> selected_seqs, indices = acquisition(sequences)
     """
     def __init__(self, target_size, seed=None):
         self.target_size = target_size
@@ -52,12 +56,15 @@ class RandomAcquisition(Acquisition):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            Selected sequences and their indices
+            Selected sequences of shape (target_size, A, L) and their indices
         """
         assert x.shape[0] >= self.target_size, "Target size is larger than the number of sequences"
         N = x.shape[0]
@@ -66,23 +73,27 @@ class RandomAcquisition(Acquisition):
 
 
 class ScoreAcquisition(Acquisition):
-    """Acquisition that selects sequences with highest uncertainty scores.
+    """Acquisition that selects sequences with highest scores.
     
     Parameters
     ----------
     target_size : int
         Number of sequences to select
     scorer : Callable
-        Function that scores sequences
+        Function that scores sequences, should return a tensor of shape (N,)
+    batch_size : int, optional
+        Batch size for processing sequences, by default 32
+    device : str, optional
+        Device to use for computations ('cuda' or 'cpu'), by default None
         
     Examples
     --------
     >>> # Using uncertainty scores from a model wrapper
     >>> acq = ScoreAcquisition(target_size=32, scorer=model.uncertainty)
-    >>> x, idx = acq.select(sequences)
-    >>> # Using Y scores from a model wrapper
+    >>> selected_seqs, indices = acq(sequences)
+    >>> # Using prediction scores from a model wrapper
     >>> acq = ScoreAcquisition(target_size=32, scorer=model.predict)
-    >>> x, idx = acq.select(sequences)
+    >>> selected_seqs, indices = acq(sequences)
     """
     def __init__(self, target_size: int, scorer: Callable, batch_size: int = 32, device: Union[str,None] = None):
         self.target_size = target_size
@@ -96,12 +107,16 @@ class ScoreAcquisition(Acquisition):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            Selected sequences and their indices
+            Selected sequences of shape (target_size, A, L) and their indices,
+            sorted by descending score
         """
         assert x.shape[0] >= self.target_size, "Target size is larger than the number of sequences"
         if x.shape[0] < self.batch_size:
@@ -132,30 +147,37 @@ class ScoreAcquisition(Acquisition):
 class LCMDAcquisition(Acquisition):
     """Acquisition that selects sequences using LCMD (Linear Centered Maximum Distance) method.
     
+    LCMD selects sequences that maximize diversity in feature space while considering
+    the training data distribution.
+    
     Parameters
     ----------
     target_size : int
         Number of sequences to select
-    models : list
-        List of models for LCMD selection
+    models : list[torch.nn.Module]
+        List of models used for feature extraction
     x_train : torch.Tensor
-        Training data used for selection
+        Training data used for selection, shape (N_train, A, L)
     y_train : torch.Tensor
-        Training labels used for selection
-    device : str, optional
-        Device to use for computations, by default 'cuda'
-    batch_size : int, optional
-        Batch size for computations, by default 100
+        Training labels used for selection, shape (N_train,)
     base_kernel : str, optional
-        Kernel type for selection, by default 'grad'
-    kernel_transforms : list, optional
-        List of kernel transformations, by default [('rp', [512])]
+        Kernel type for feature extraction ('grad' or 'last_layer'), by default 'grad'
+    kernel_transforms : list[tuple], optional
+        List of kernel transformations to apply, by default [('rp', [512])]
+        Each tuple contains (transform_type, transform_params)
     sel_with_train : bool, optional
-        Whether to include training data in selection, by default False
+        Whether to include training data in selection pool, by default False
         
     Examples
     --------
-    >>> x, idx = LCMDAcquisition(target_size=32, models=models, x_train=x_train, y_train=y_train)
+    >>> acquisition = LCMDAcquisition(
+    ...     target_size=32,
+    ...     models=models,
+    ...     x_train=x_train,
+    ...     y_train=y_train,
+    ...     base_kernel='grad'
+    ... )
+    >>> selected_seqs, indices = acquisition(sequences)
     """
     def __init__(self, target_size, models, x_train, y_train, base_kernel='grad', 
                  kernel_transforms=[('rp', [512])], sel_with_train=False):
@@ -178,12 +200,16 @@ class LCMDAcquisition(Acquisition):
         Parameters
         ----------
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
             
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            Selected sequences and their indices
+            Selected sequences of shape (target_size, A, L) and their indices,
+            chosen to maximize diversity in feature space
         """
 
         train_data = self.TensorFeatureData(torch.tensor(self.x_train))
@@ -194,4 +220,3 @@ class LCMDAcquisition(Acquisition):
                                 base_kernel=self.base_kernel, kernel_transforms=self.kernel_transforms) 
 
         return x[idx], idx
-    

@@ -6,12 +6,12 @@ class AttributionMethod:
     """Abstract base class for sequence attribution methods.
     
     All attribution classes should inherit from this class and implement
-    the attribute method.
+    the attribute method to calculate attribution scores for input sequences.
 
     Parameters
     ----------
     scorer : Callable
-        The scorer to compute attributions for
+        Function that takes input sequences and returns scores/predictions to attribute
     """
     def __init__(self, scorer: Callable):
         self.scorer = scorer
@@ -32,33 +32,39 @@ class AttributionMethod:
         Returns
         -------
         torch.Tensor
-            Attribution scores with same shape as input
+            Attribution scores with same shape as input (N, A, L), indicating
+            the importance/contribution of each position and nucleotide
         """
         raise NotImplementedError
+    
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        return self.attribute(x)
 
 
 class Saliency(AttributionMethod):
-    """Attribution method that calculates gradients w.r.t. inputs.
+    """Attribution method that calculates gradients with respect to inputs.
     
-    This class computes attribution scores by calculating the gradients of the model's
-    predictions with respect to the input sequences.
+    This class computes attribution scores by calculating the gradients of the scorer's
+    output with respect to each input position. The gradient magnitude indicates
+    how much changing that position would affect the output.
     
     Parameters
     ----------
-    model : ModelWrapper
-        ModelWrapper instance with uncertainty estimation capability
+    scorer : Callable
+        Function that takes input sequences and returns differentiable scores/predictions
         
     Examples
     --------
-    >>> model = ModelWrapper(base_model, predictor, uncertainty_method)
+    >>> model = ModelWrapper(base_model, predictor)
     >>> attr = Saliency(model)
-    >>> scores = attr.attribute(sequences)
+    >>> scores = attr.attribute(sequences)  # Returns gradient-based importance scores
+    >>> scores = attr(sequences)  # Alternative call syntax
     """
     def __init__(self, scorer: Callable):
         self.scorer = scorer
         
     def attribute(self, x: torch.Tensor) -> torch.Tensor:
-        """Calculate attribution scores.
+        """Calculate gradient-based attribution scores.
         
         Parameters
         ----------
@@ -73,7 +79,8 @@ class Saliency(AttributionMethod):
         Returns
         -------
         torch.Tensor
-            Attribution scores of shape (N, A, L)
+            Attribution scores of shape (N, A, L), where each value represents
+            the gradient of the output with respect to that input position
         """
         # Enable gradient tracking for inputs
         x = x.clone().requires_grad_(True)
@@ -87,5 +94,4 @@ class Saliency(AttributionMethod):
             
         return attr_scores
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        return self.attribute(x)
+    
