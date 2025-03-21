@@ -3,7 +3,7 @@ name: Build and Deploy Docs
 on:
   push:
     branches:
-      - main  # or master, depending on your default branch
+      - master  
       - docs
 
 permissions:
