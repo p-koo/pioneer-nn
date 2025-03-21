@@ -5,22 +5,31 @@ from torch.utils.data import DataLoader, TensorDataset
 class ModelWrapper(torch.nn.Module):
     """Model wrapper for predictions and uncertainty estimation.
     
+    This class wraps a PyTorch model (or ensemble of models) to provide a unified interface
+    for making predictions and estimating uncertainties. It handles model loading, device 
+    placement, and batched inference.
+    
     Parameters
     ----------
     model : torch.nn.Module or list[torch.nn.Module]
-        Model or list of models for ensemble
-    predictor : Predictor
-        Prediction method for generating outputs
-    uncertainty_method : UncertaintyMethod, optional
+        Single model or list of models for ensemble prediction
+    predictor : pioneer.predictor.Predictor
+        Prediction method for generating outputs from model(s)
+    uncertainty_method : pioneer.uncertainty.UncertaintyMethod, optional
         Method for estimating prediction uncertainty, by default None
+    batch_size : int, optional
+        Batch size for inference, by default 32
         
     Examples
     --------
     >>> model = ModelWrapper(
     ...     model=MyModel(),
     ...     predictor=ScalarPredictor(),
-    ...     uncertainty_method=MCDropout()
+    ...     uncertainty_method=MCDropout(),
+    ...     batch_size=32
     ... )
+    >>> predictions = model.predict(sequences)
+    >>> uncertainties = model.uncertainty(sequences)
     """
     def __init__(self, model, predictor, uncertainty_method=None, batch_size:int=32):
         super().__init__()
@@ -31,6 +40,22 @@ class ModelWrapper(torch.nn.Module):
         self.batch_size=batch_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the model.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+            
+        Returns
+        -------
+        torch.Tensor
+            Model predictions of shape (N,) for single task
+            or (N, T) for T tasks
+        """
         if isinstance(self.model, list):
             # Handle ensemble of models
             pred = torch.stack([
@@ -55,10 +80,9 @@ class ModelWrapper(torch.nn.Module):
             N is batch size,
             A is alphabet size,
             L is sequence length
-        
-        auto_batch: bool
-            If True, this method will automate batching. However this will tend to break gradients
-            If False, this method will not autobatch but will retain gradients
+        auto_batch : bool, optional
+            If True, automatically batch inputs but break gradients.
+            If False, preserve gradients but no batching, by default True
 
         Returns
         -------
@@ -88,18 +112,25 @@ class ModelWrapper(torch.nn.Module):
     def uncertainty(self, x: torch.Tensor, auto_batch:bool=True) -> torch.Tensor:
         """Generate uncertainty estimates using batched inference.
         
+        This method uses the specified uncertainty estimation method (e.g. MC Dropout,
+        ensemble variance) to compute uncertainty scores for each input sequence.
+        
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
+        auto_batch : bool, optional
+            If True, automatically batch inputs but break gradients.
+            If False, preserve gradients but no batching, by default True
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,)
+            Uncertainty scores of shape (N,), where higher values indicate
+            greater prediction uncertainty
             
         Raises
         ------
@@ -126,6 +157,3 @@ class ModelWrapper(torch.nn.Module):
                 uncertainty = torch.cat(uncertainty)
 
         return uncertainty
-
-
-        

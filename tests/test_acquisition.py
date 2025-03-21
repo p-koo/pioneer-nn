@@ -1,8 +1,8 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from acquisition import RandomAcquisition, ScoreAcquisition
+sys.path.append('./')
+from pioneer.acquisition import RandomAcquisition, ScoreAcquisition
 
 @pytest.fixture(params=[
     (10, 4, 100),  # original size

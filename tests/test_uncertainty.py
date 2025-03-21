@@ -1,8 +1,8 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from uncertainty import MCDropout, DeepEnsemble
+sys.path.append('./')
+from pioneer.uncertainty import MCDropout, DeepEnsemble
 
 @pytest.fixture(params=[
     (10, 4, 100),  # original size

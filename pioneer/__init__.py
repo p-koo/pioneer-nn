@@ -1,43 +1,88 @@
-from .pioneer import PIONEER
-from .oracle import SingleOracle, EnsembleOracle
-from .generator import Random as RandomGenerator
-from .generator import Mutagenesis, GuidedMutagenesis
-from .acquisition import Random as RandomAcquisition
-from .acquisition import Uncertainty
-from .attribution import UncertaintySaliency, ActivitySaliency
-from .predictor import Scalar, Profile
-from .surrogate import ModelWrapper
-from .uncertainty import MCDropout, DeepEnsemble
+from pioneer.pioneer import PIONEER
+from pioneer.proposer import (
+    Proposer,
+    SequentialProposer,
+    MultiProposer
+)
+from pioneer.generator import (
+    Generator,
+    RandomGenerator,
+    MutagenesisGenerator, 
+    GuidedMutagenesisGenerator,
+    PoolBasedGenerator
+)
+from pioneer.acquisition import (
+    Acquisition,
+    RandomAcquisition,
+    ScoreAcquisition,
+    LCMDAcquisition
+)
+from pioneer.attribution import (
+    AttributionMethod,
+    Saliency
+)
+from pioneer.predictor import (
+    Predictor,
+    Scalar,
+    Profile
+)
+from pioneer.uncertainty import (
+    UncertaintyMethod,
+    MCDropout,
+    DeepEnsemble
+)
+from pioneer.oracle import (
+    Oracle,
+    SingleOracle,
+    EnsembleOracle
+)
+from pioneer.surrogate import ModelWrapper
+from pioneer.utils import upsample
 
 __all__ = [
-    # Main framework
+    # Main class
     'PIONEER',
     
-    # Oracles
-    'SingleOracle',
-    'EnsembleOracle',
+    # Base classes
+    'Proposer',
+    'Generator',
+    'Acquisition',
+    'AttributionMethod', 
+    'Predictor',
+    'UncertaintyMethod',
+    'Oracle',
     
-    # Generators
-    'Random',
-    'Mutagenesis',
-    'GuidedMutagenesis',
+    # Generators and Proposers
+    'RandomGenerator',
+    'MutagenesisGenerator',
+    'GuidedMutagenesisGenerator',
+    'PoolBasedGenerator',
+    'SequentialProposer',
+    'MultiProposer',
     
     # Acquisition methods
     'RandomAcquisition',
-    'UncertaintyAcquisition',
+    'ScoreAcquisition',
+    'LCMDAcquisition',
     
     # Attribution methods
-    'UncertaintySaliency',
-    'ActivitySaliency',
+    'Saliency',
     
     # Predictors
     'Scalar',
     'Profile',
     
-    # Model wrapper
-    'ModelWrapper',
-    
     # Uncertainty methods
     'MCDropout',
     'DeepEnsemble',
+    
+    # Oracles
+    'SingleOracle',
+    'EnsembleOracle',
+    
+    # Model wrapper
+    'ModelWrapper',
+    
+    # Utilities
+    'upsample'
 ] 

@@ -1,9 +1,9 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from proposer import MultiProposer, SequentialProposer
-from generator import RandomGenerator, MutagenesisGenerator
+sys.path.append('./')
+from pioneer.proposer import MultiProposer, SequentialProposer
+from pioneer.generator import RandomGenerator, MutagenesisGenerator
 from math import floor
 
 @pytest.fixture(params=[

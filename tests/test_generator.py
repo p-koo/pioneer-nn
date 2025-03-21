@@ -1,11 +1,11 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from generator import RandomGenerator, MutagenesisGenerator, GuidedMutagenesisGenerator, PoolBasedGenerator
+sys.path.append('./')
+from pioneer.generator import RandomGenerator, MutagenesisGenerator, GuidedMutagenesisGenerator, PoolBasedGenerator
 from scipy.stats import spearmanr, pearsonr
 from math import floor
-from acquisition import RandomAcquisition, ScoreAcquisition
+from pioneer.acquisition import RandomAcquisition, ScoreAcquisition
 @pytest.fixture(params=[
     (10, 4, 100),  # original size
     (10, 4, 50),    # shorter sequence

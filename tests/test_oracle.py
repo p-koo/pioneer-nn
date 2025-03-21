@@ -1,9 +1,9 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from oracle import SingleOracle, EnsembleOracle
-from predictor import Scalar
+sys.path.append('./')
+from pioneer.oracle import SingleOracle, EnsembleOracle
+from pioneer.predictor import Scalar
 import pytorch_lightning as pl
 @pytest.fixture(params=[
     (10, 4, 100),  # original size

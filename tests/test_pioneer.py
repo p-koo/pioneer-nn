@@ -2,13 +2,13 @@ import torch
 import pytest
 import pytorch_lightning as pl
 import sys
-sys.path.append('./pioneer')
+sys.path.append('./')
 from pioneer import PIONEER
-from surrogate import ModelWrapper
-from oracle import SingleOracle
-from generator import RandomGenerator
-from acquisition import RandomAcquisition
-from predictor import Scalar
+from pioneer.surrogate import ModelWrapper
+from pioneer.oracle import SingleOracle
+from pioneer.generator import RandomGenerator
+from pioneer.acquisition import RandomAcquisition
+from pioneer.predictor import Scalar
 
 @pytest.fixture(params=[
     (10, 4, 100),  # original size

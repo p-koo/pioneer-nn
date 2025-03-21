@@ -6,7 +6,7 @@ class Oracle:
     """Abstract base class for experimental oracles.
     
     All oracle classes should inherit from this class and implement
-    the predict method.
+    the predict method to generate ground truth labels for input sequences.
     """
     def predict(self, x, batch_size=32):
         """Generate ground truth labels for input sequences.
@@ -16,7 +16,7 @@ class Oracle:
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
             Batch size for processing, by default 32
@@ -24,14 +24,18 @@ class Oracle:
         Returns
         -------
         torch.Tensor
-            Ground truth labels of shape (N,) for single task
-            or (N, T) for T tasks
+            Ground truth labels of shape (N,1) for single task
+            or (N,T) for T tasks
         """
         raise NotImplementedError
 
 
 class SingleOracle(Oracle):
     """Oracle that uses a single pre-trained model for inference.
+    
+    This class wraps a single pre-trained model to act as an oracle for generating
+    predictions on input sequences. It handles model loading, device placement,
+    and batched inference.
     
     Parameters
     ----------
@@ -41,16 +45,16 @@ class SingleOracle(Oracle):
         Arguments to initialize the model
     weight_path : str
         Path to model weights file
-    predictor : Predictor
+    predictor : pioneer.predictor.Predictor
         Prediction method for generating outputs
     device : str, optional
         Device to run model on ('cuda' or 'cpu').
-        Defaults to 'cuda' if available, by default None
+        Defaults to 'cuda' if available
     model_type : str, optional
         Type of model to use ('pytorch' or 'lightning').
-        Defaults to 'pytorch'
-        if 'lightning' is used, the model will be loaded from a checkpoint file
-        if 'pytorch' is used, the model will be loaded from a state_dict file
+        If 'lightning', loads from checkpoint file.
+        If 'pytorch', loads from state_dict file.
+        By default 'pytorch'
             
     Examples
     --------
@@ -80,22 +84,25 @@ class SingleOracle(Oracle):
     def predict(self, x, batch_size=32):
         """Generate predictions using batched inference.
         
+        This method processes input sequences in batches to generate predictions
+        efficiently while managing memory usage.
+        
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
+            Batch size for processing. Decrease if running into 
+            GPU memory issues. By default 32
                 
         Returns
         -------
         torch.Tensor
-            Model predictions of shape (N,) for single task
-            or (N, T) for T tasks
+            Model predictions of shape (N,1) for single task
+            or (N,T) for T tasks
         """
         predictions = []
         
@@ -120,6 +127,10 @@ class SingleOracle(Oracle):
 class EnsembleOracle(Oracle):
     """Oracle that uses an ensemble of pre-trained models.
     
+    This class manages multiple pre-trained models as an ensemble to generate
+    predictions and uncertainty estimates. It handles model loading, device
+    placement, and batched inference across the ensemble.
+    
     Parameters
     ----------
     model_class : type
@@ -128,16 +139,16 @@ class EnsembleOracle(Oracle):
         Arguments to initialize each model
     weight_paths : list[str]
         Paths to model weight files
-    predictor : Predictor
+    predictor : pioneer.predictor.Predictor
         Prediction method for generating outputs
     device : str, optional
         Device to run models on ('cuda' or 'cpu').
-        Defaults to 'cuda' if available, by default None
+        Defaults to 'cuda' if available
     model_type : str, optional
         Type of model to use ('pytorch' or 'lightning').
-        Defaults to 'pytorch'
-        if 'lightning' is used, the model will be loaded from a checkpoint file
-        if 'pytorch' is used, the model will be loaded from a state_dict file
+        If 'lightning', loads from checkpoint files.
+        If 'pytorch', loads from state_dict files.
+        By default 'pytorch'
             
     Examples
     --------
@@ -147,6 +158,7 @@ class EnsembleOracle(Oracle):
     >>> predictor = Profile(reduction=torch.mean)  # For profile outputs
     >>> oracle = EnsembleOracle(model_class, model_kwargs, weight_paths, predictor)
     >>> labels = oracle.predict(sequences)
+    >>> labels, uncertainties = oracle.predict_uncertainty(sequences)
     """
     def __init__(self, model_class, model_kwargs, weight_paths, predictor, device=None, model_type='pytorch'):
         # Set device (default to GPU if available)
@@ -171,24 +183,29 @@ class EnsembleOracle(Oracle):
         self.predictor = predictor
 
     def full_predict(self, x, batch_size=32):
-        """Generate ensemble predictions using batched inference.
+        """Generate raw ensemble predictions using batched inference.
+        
+        This method returns predictions from each model in the ensemble
+        before averaging, useful for uncertainty estimation.
         
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
+            Batch size for processing. Decrease if running into 
+            GPU memory issues. By default 32
                 
         Returns
         -------
         torch.Tensor
-            Mean predictions across ensemble of shape (N,) for single task
-            or (N, T) for T tasks
+            Raw predictions from each model of shape (E, N, T) where:
+            E is ensemble size,
+            N is batch size,
+            T is number of tasks (or 1 for single task)
         """
         predictions = []
         
@@ -216,22 +233,24 @@ class EnsembleOracle(Oracle):
     def predict(self, x, batch_size=32):
         """Generate ensemble predictions using batched inference.
         
+        This method returns the mean predictions across the ensemble.
+        
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
+            Batch size for processing. Decrease if running into 
+            GPU memory issues. By default 32
                 
         Returns
         -------
         torch.Tensor
-            Mean predictions across ensemble of shape (N,) for single task
-            or (N, T) for T tasks
+            Mean predictions across ensemble of shape (N,1) for single task
+            or (N,T) for T tasks
         """
         predictions = self.full_predict(x, batch_size).mean(dim=0)
         if predictions.ndim == 1:
@@ -243,25 +262,27 @@ class EnsembleOracle(Oracle):
     def predict_uncertainty(self, x, batch_size=32):
         """Generate ensemble predictions and uncertainty using batched inference.
         
+        This method returns both the mean predictions and standard deviations
+        across the ensemble, providing uncertainty estimates.
+        
         Parameters
         ----------
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
+            Batch size for processing. Decrease if running into 
+            GPU memory issues. By default 32
                 
         Returns
         -------
-        torch.Tensor
-            Mean predictions across ensemble of shape (N,) for single task
-            or (N, T) for T tasks
-        torch.Tensor
-            Uncertainty of shape (N,) for single task
-            or (N, T) for T tasks
+        tuple[torch.Tensor, torch.Tensor]
+            - Mean predictions across ensemble of shape (N,1) for single task
+              or (N,T) for T tasks
+            - Standard deviations across ensemble of shape (N,1) for single task
+              or (N,T) for T tasks, representing prediction uncertainty
         """
         predictions = self.full_predict(x, batch_size)
         means = predictions.mean(dim=0)
@@ -273,5 +294,3 @@ class EnsembleOracle(Oracle):
         
         return means, stds
 
-
-    

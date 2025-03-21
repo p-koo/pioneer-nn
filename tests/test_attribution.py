@@ -1,8 +1,8 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from attribution import Saliency
+sys.path.append('./')
+from pioneer.attribution import Saliency
 
 @pytest.fixture(params=[
     (10, 4, 100),  # original size

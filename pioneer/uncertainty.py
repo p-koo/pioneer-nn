@@ -6,7 +6,7 @@ class UncertaintyMethod:
     """Abstract base class for uncertainty estimation methods.
     
     All uncertainty methods should inherit from this class and implement
-    the estimate method.
+    the __call__ method to estimate prediction uncertainties.
     """
     def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates for input sequences.
@@ -14,17 +14,18 @@ class UncertaintyMethod:
         Parameters
         ----------
         model : torch.nn.Module or list[torch.nn.Module]
-            PyTorch model or list of models
+            PyTorch model or list of models for ensemble prediction
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
-        batch_size : int, optional
-            Batch size for processing. Decrease this value if running into 
-            GPU memory issues, by default 32
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size (e.g. 4 for DNA),
+            L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,)
+            Uncertainty scores of shape (N,) where higher values indicate
+            greater prediction uncertainty
         """
         pass
 
@@ -32,15 +33,21 @@ class UncertaintyMethod:
 class MCDropout(UncertaintyMethod):
     """Uncertainty estimation using Monte Carlo Dropout.
     
+    This class implements uncertainty estimation by performing multiple forward passes
+    through a model with dropout enabled. The variance across predictions provides
+    an estimate of model uncertainty.
+    
     Parameters
     ----------
     n_samples : int, optional
-        Number of forward passes with dropout, by default 20
+        Number of forward passes with dropout enabled, by default 20
             
     Examples
     --------
+    >>> # Initialize uncertainty estimator with 20 samples
     >>> uncertainty = MCDropout(n_samples=20)
-    >>> scores = uncertainty.estimate(model, sequences)
+    >>> # Get uncertainty scores for sequences
+    >>> scores = uncertainty(model, sequences)  # Shape: (N,)
     """
     def __init__(self, n_samples=20):
         self.n_samples = n_samples
@@ -52,14 +59,18 @@ class MCDropout(UncertaintyMethod):
         Parameters
         ----------
         model : torch.nn.Module
-            PyTorch model with dropout layers
+            PyTorch model with dropout layers that will be enabled during inference
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size (e.g. 4 for DNA),
+            L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,)
+            Uncertainty scores of shape (N,) where higher values indicate
+            greater prediction uncertainty
         """
         model.train()  # Enable dropout
         
@@ -78,11 +89,16 @@ class MCDropout(UncertaintyMethod):
 class DeepEnsemble(UncertaintyMethod):
     """Uncertainty estimation using Deep Ensembles.
     
+    This class implements uncertainty estimation by combining predictions from multiple
+    independently trained models. The variance across model predictions provides
+    an estimate of model uncertainty.
+    
     Examples
     --------
-    >>> models = [model1, model2, model3]
+    >>> # Initialize uncertainty estimator
     >>> uncertainty = DeepEnsemble()
-    >>> scores = uncertainty.estimate(models, sequences)
+    >>> # Get uncertainty scores using ensemble of models
+    >>> scores = uncertainty(models, sequences)  # Shape: (N,)
     """
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -92,15 +108,19 @@ class DeepEnsemble(UncertaintyMethod):
         
         Parameters
         ----------
-        model : torch.nn.Module
-            PyTorch model containing a list of models in its .models attribute
+        models : list[torch.nn.Module]
+            List of independently trained PyTorch models for ensemble prediction
         x : torch.Tensor
-            Input sequences of shape (N, A, L)
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size (e.g. 4 for DNA),
+            L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,)
+            Uncertainty scores of shape (N,) where higher values indicate
+            greater prediction uncertainty
         """
         [model.eval() for model in models]
 
