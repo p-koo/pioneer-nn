@@ -1,34 +1,34 @@
-from .pioneer import PIONEER
-from .proposer import (
+from pioneer.pioneer import PIONEER
+from pioneer.proposer import (
     SequentialProposer,
     MultiProposer
 )
-from .generator import (
+from pioneer.generator import (
     RandomGenerator,
     MutagenesisGenerator, 
     GuidedMutagenesisGenerator,
     PoolBasedGenerator
 )
-from .acquisition import (
+from pioneer.acquisition import (
     RandomAcquisition,
     ScoreAcquisition,
     LCMDAcquisition
 )
-from .attribution import Saliency
-from .predictor import (
+from pioneer.attribution import Saliency
+from pioneer.predictor import (
     Scalar,
     Profile
 )
-from .uncertainty import (
+from pioneer.uncertainty import (
     MCDropout,
     DeepEnsemble
 )
-from .oracle import (
+from pioneer.oracle import (
     SingleOracle,
     EnsembleOracle
 )
-from .surrogate import ModelWrapper
-from .utils import upsample
+from pioneer.surrogate import ModelWrapper
+from pioneer.utils import upsample
 
 __all__ = [
     # Main class

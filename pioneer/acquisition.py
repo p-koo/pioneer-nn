@@ -1,9 +1,7 @@
 import torch
 from typing import Callable, Union, Optional
 from torch.utils.data import TensorDataset, DataLoader
-import sys
-sys.path.append('./')
-from proposer import Proposer
+from pioneer.proposer import Proposer
 
 class Acquisition(Proposer):
     """Abstract base class for sequence acquisition.

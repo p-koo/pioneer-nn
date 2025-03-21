@@ -2,10 +2,10 @@ import torch
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader, TensorDataset
 from typing import Optional, Callable
-from surrogate import ModelWrapper
-from oracle import SingleOracle
-from generator import Generator
-from acquisition import Acquisition
+from pioneer.surrogate import ModelWrapper
+from pioneer.oracle import SingleOracle
+from pioneer.generator import Generator
+from pioneer.acquisition import Acquisition
 
 class PIONEER:
     """Framework for active learning with sequence generation.
@@ -18,13 +18,13 @@ class PIONEER:
     
     Parameters
     ----------
-    model : ModelWrapper
+    model : pioneer.surrogate.ModelWrapper
         ModelWrapper instance containing the surrogate model, predictor and uncertainty estimator
-    oracle : Oracle
+    oracle : pioneer.oracle.Oracle
         Oracle instance that provides ground truth labels for sequences
-    generator : Generator
+    generator : pioneer.generator.Generator
         Generator instance that proposes new candidate sequences
-    acquisition : Acquisition
+    acquisition : pioneer.acquisition.Acquisition
         Acquisition instance that selects promising sequences for labeling
     batch_size : int, optional
         Batch size for training and inference, by default 32
@@ -79,7 +79,7 @@ class PIONEER:
             PyTorch Lightning Trainer for model training
             If provided, takes precedence over train_fnc
         train_fnc : Callable, optional
-            Custom training function that takes (model, train_loader, val_loader, **kwargs)
+            Custom training function that takes (model, train_loader, val_loader, \**kwargs)
             Used only if trainer is None
         train_loader : torch.utils.data.DataLoader, optional
             DataLoader containing training data
@@ -97,7 +97,7 @@ class PIONEER:
         val_y : torch.Tensor, optional
             Validation labels of shape (N,)
             Used to create val_loader if not provided
-        **train_kwargs
+        \**train_kwargs
             Additional keyword arguments passed to train_fnc
             
         Raises
@@ -270,7 +270,7 @@ class PIONEER:
         
         Parameters
         ----------
-        model : ModelWrapper
+        model : pioneer.surrogate.ModelWrapper
             ModelWrapper instance containing the model to save
         path : str
             Path where weights will be saved

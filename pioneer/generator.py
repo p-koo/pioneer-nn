@@ -2,10 +2,9 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 from typing import Callable, Union, Optional
-import sys
-sys.path.append('./')
-from proposer import Proposer
-from acquisition import Acquisition
+
+from pioneer.proposer import Proposer
+from pioneer.acquisition import Acquisition
 
 
 class Generator(Proposer):
