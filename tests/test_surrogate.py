@@ -112,7 +112,7 @@ def test_model_wrapper_uncertainty(sample_data, uncertainty_method):
     
     # Initialize model and wrapper
     if isinstance(uncertainty_method, DeepEnsemble):
-        model = MockEnsemble(A=A, L=L).to(device)
+        model = MockEnsemble(A=A, L=L).models.to(device)
     else:
         model = MockModel(A=A, L=L).to(device)
     
