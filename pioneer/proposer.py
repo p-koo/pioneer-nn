@@ -6,6 +6,8 @@ class Proposer:
     
     All proposer classes should inherit from this class and implement
     the __call__ method to propose new sequences based on input sequences.
+    This can include generating mutations, combining sequences, or selecting
+    promising candidates.
     """
     def __call__(self, x):
         """Propose a batch of sequences.
@@ -15,7 +17,7 @@ class Proposer:
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
                 
         Returns
@@ -29,15 +31,19 @@ class SequentialProposer(Proposer):
     """Proposer that applies multiple proposers in sequence.
     
     This class takes a list of proposers and applies them sequentially to the input sequences.
-    Each proposer's output becomes the input to the next proposer in the list.
+    Each proposer's output becomes the input to the next proposer in the list. This allows
+    for composing multiple sequence modification strategies, such as applying random mutations
+    followed by guided mutations.
     
     Parameters
     ----------
     proposer_list : list[Proposer]
-        List of proposer instances to apply in sequence
+        List of proposer instances to apply in sequence. Can include any combination
+        of Generator or Acquisition proposers.
         
     Examples
     --------
+    >>> # Apply random mutations followed by guided mutations
     >>> g1 = MutationGenerator(mut_rate=0.1)
     >>> g2 = GuidedMutagenesisGenerator(attr_method, mut_rate=0.2)
     >>> seq_proposer = SequentialProposer([g1, g2])
@@ -55,14 +61,15 @@ class SequentialProposer(Proposer):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
                 
         Returns
         -------
         torch.Tensor
             Sequences after applying all proposers in sequence,
-            with same shape as input (N, A, L)
+            with same shape as input (N, A, L). Each sequence has been
+            modified by each proposer in order.
         """
         # Apply each proposer in sequence
         x_mut = x.clone()
@@ -75,15 +82,19 @@ class MultiProposer(Proposer):
     """Proposer that applies multiple proposers in parallel and combines results.
     
     This class takes a list of proposers and applies them independently to the input sequences.
-    The outputs from all proposers are concatenated along the batch dimension.
+    The outputs from all proposers are concatenated along the batch dimension. This allows
+    for exploring multiple sequence modification strategies simultaneously, such as combining
+    random and guided mutations into a single candidate pool.
     
     Parameters
     ----------
     proposer_list : list[Proposer]
-        List of proposer instances to apply in parallel
+        List of proposer instances to apply in parallel. Can include any combination
+        of Generator or Acquisition proposers.
         
     Examples
     --------
+    >>> # Generate both random and guided mutations
     >>> g1 = MutationGenerator(mut_rate=0.1)
     >>> g2 = GuidedMutagenesisGenerator(attr_method, mut_rate=0.2)
     >>> multi_proposer = MultiProposer([g1, g2])
@@ -101,7 +112,7 @@ class MultiProposer(Proposer):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
                 
         Returns
@@ -109,7 +120,9 @@ class MultiProposer(Proposer):
         torch.Tensor
             Combined sequences from all proposers,
             shape (N * n_proposers, A, L) where n_proposers
-            is the number of proposers in proposer_list
+            is the number of proposers in proposer_list. The first N
+            sequences are from the first proposer, the next N from
+            the second proposer, and so on.
         """
         # Get shape parameters
         N, A, L = x.shape

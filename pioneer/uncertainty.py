@@ -18,14 +18,14 @@ class UncertaintyMethod:
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,) for single task
-            or (N, T) for T tasks
+            Uncertainty scores of shape (N,) where higher values indicate
+            greater prediction uncertainty
         """
         pass
 
@@ -44,8 +44,10 @@ class MCDropout(UncertaintyMethod):
             
     Examples
     --------
+    >>> # Initialize uncertainty estimator with 20 samples
     >>> uncertainty = MCDropout(n_samples=20)
-    >>> scores = uncertainty(model, sequences)
+    >>> # Get uncertainty scores for sequences
+    >>> scores = uncertainty(model, sequences)  # Shape: (N,)
     """
     def __init__(self, n_samples=20):
         self.n_samples = n_samples
@@ -57,18 +59,18 @@ class MCDropout(UncertaintyMethod):
         Parameters
         ----------
         model : torch.nn.Module
-            PyTorch model with dropout layers
+            PyTorch model with dropout layers that will be enabled during inference
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,) for single task
-            or (N, T) for T tasks
+            Uncertainty scores of shape (N,) where higher values indicate
+            greater prediction uncertainty
         """
         model.train()  # Enable dropout
         
@@ -93,9 +95,10 @@ class DeepEnsemble(UncertaintyMethod):
     
     Examples
     --------
-    >>> models = [model1, model2, model3]
+    >>> # Initialize uncertainty estimator
     >>> uncertainty = DeepEnsemble()
-    >>> scores = uncertainty(models, sequences)
+    >>> # Get uncertainty scores using ensemble of models
+    >>> scores = uncertainty(models, sequences)  # Shape: (N,)
     """
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -105,19 +108,19 @@ class DeepEnsemble(UncertaintyMethod):
         
         Parameters
         ----------
-        model : torch.nn.Module
-            PyTorch model containing a list of models in its .models attribute
+        models : list[torch.nn.Module]
+            List of independently trained PyTorch models for ensemble prediction
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Uncertainty scores of shape (N,) for single task
-            or (N, T) for T tasks
+            Uncertainty scores of shape (N,) where higher values indicate
+            greater prediction uncertainty
         """
         [model.eval() for model in models]
 

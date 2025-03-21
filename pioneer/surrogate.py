@@ -13,17 +13,20 @@ class ModelWrapper(torch.nn.Module):
     ----------
     model : torch.nn.Module or list[torch.nn.Module]
         Single model or list of models for ensemble prediction
-    predictor : Predictor
+    predictor : pioneer.predictor.Predictor
         Prediction method for generating outputs from model(s)
-    uncertainty_method : UncertaintyMethod, optional
+    uncertainty_method : pioneer.uncertainty.UncertaintyMethod, optional
         Method for estimating prediction uncertainty, by default None
+    batch_size : int, optional
+        Batch size for inference, by default 32
         
     Examples
     --------
     >>> model = ModelWrapper(
     ...     model=MyModel(),
     ...     predictor=ScalarPredictor(),
-    ...     uncertainty_method=MCDropout()
+    ...     uncertainty_method=MCDropout(),
+    ...     batch_size=32
     ... )
     >>> predictions = model.predict(sequences)
     >>> uncertainties = model.uncertainty(sequences)
@@ -37,6 +40,22 @@ class ModelWrapper(torch.nn.Module):
         self.batch_size=batch_size
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Forward pass through the model.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input sequences of shape (N, A, L) where:
+            N is batch size,
+            A is alphabet size,
+            L is sequence length
+            
+        Returns
+        -------
+        torch.Tensor
+            Model predictions of shape (N,) for single task
+            or (N, T) for T tasks
+        """
         if isinstance(self.model, list):
             # Handle ensemble of models
             pred = torch.stack([
@@ -61,10 +80,9 @@ class ModelWrapper(torch.nn.Module):
             N is batch size,
             A is alphabet size,
             L is sequence length
-        
-        auto_batch: bool
-            If True, this method will automate batching. However this will tend to break gradients
-            If False, this method will not autobatch but will retain gradients
+        auto_batch : bool, optional
+            If True, automatically batch inputs but break gradients.
+            If False, preserve gradients but no batching, by default True
 
         Returns
         -------
@@ -104,6 +122,9 @@ class ModelWrapper(torch.nn.Module):
             N is batch size,
             A is alphabet size (e.g. 4 for DNA),
             L is sequence length
+        auto_batch : bool, optional
+            If True, automatically batch inputs but break gradients.
+            If False, preserve gradients but no batching, by default True
             
         Returns
         -------

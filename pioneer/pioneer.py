@@ -16,6 +16,12 @@ class PIONEER:
     3. Selects promising sequences using the acquisition function
     4. Gets ground truth labels from the oracle
     
+    The PIONEER framework enables iterative improvement of sequence design by combining:
+    - A surrogate model that learns to predict sequence properties
+    - A generator that proposes new candidate sequences
+    - An acquisition function that selects promising candidates
+    - An oracle that provides ground truth labels
+    
     Parameters
     ----------
     model : pioneer.surrogate.ModelWrapper
@@ -31,10 +37,11 @@ class PIONEER:
     num_workers : int, optional
         Number of workers for data loading, by default 0
     cold_start : bool, optional
-        Whether to reset model weights before each training, by default False
+        Whether to reset model weights before each training cycle, by default False
         
     Examples
     --------
+    >>> # Initialize PIONEER with components
     >>> pioneer = PIONEER(
     ...     model=ModelWrapper(
     ...         model=MyModel(),
@@ -47,6 +54,7 @@ class PIONEER:
     ...     batch_size=32,
     ...     cold_start=True
     ... )
+    >>> # Run active learning cycle
     >>> x_new, y_new = pioneer.run_cycle(x_train, y_train)
     """
     def __init__(self, model: ModelWrapper, oracle: SingleOracle, generator: Generator, acquisition: Acquisition, batch_size: int = 32, num_workers: int = 0, cold_start: bool = False):
@@ -73,6 +81,11 @@ class PIONEER:
         2. Custom training function
         3. Direct tensor inputs or DataLoaders
         
+        The training can be customized through:
+        - Using a PyTorch Lightning Trainer for full training control
+        - Providing a custom training function for custom logic
+        - Passing data directly as tensors or as DataLoaders
+        
         Parameters
         ----------
         trainer : pl.Trainer, optional
@@ -87,7 +100,7 @@ class PIONEER:
             Training sequences of shape (N, A, L)
             Used to create train_loader if not provided
         y : torch.Tensor, optional
-            Training labels of shape (N,)
+            Training labels of shape (N,) or (N, T) for T tasks
             Used to create train_loader if not provided
         val_loader : torch.utils.data.DataLoader, optional
             DataLoader containing validation data
@@ -95,7 +108,7 @@ class PIONEER:
             Validation sequences of shape (N, A, L)
             Used to create val_loader if not provided
         val_y : torch.Tensor, optional
-            Validation labels of shape (N,)
+            Validation labels of shape (N,) or (N, T)
             Used to create val_loader if not provided
         \**train_kwargs
             Additional keyword arguments passed to train_fnc
@@ -125,6 +138,9 @@ class PIONEER:
     def generate_sequences(self, x:torch.Tensor) -> torch.Tensor:
         """Generate new sequence proposals using the generator.
         
+        Uses the configured generator to propose new candidate sequences based on the input sequences.
+        The generator may implement various strategies like random mutations, crossover, or learned generation.
+        
         Parameters
         ----------
         x : torch.Tensor
@@ -137,12 +153,18 @@ class PIONEER:
         -------
         torch.Tensor
             Generated sequences of shape (M, A, L)
-            where M may differ from N depending on the generator
+            where M may differ from N depending on the generator's strategy
         """
         return self.generator(x)
 
     def select_sequences(self, x:torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Select promising sequences using the acquisition function.
+        
+        Uses the configured acquisition function to select sequences for labeling.
+        The acquisition strategy may consider factors like:
+        - Model uncertainty
+        - Expected improvement
+        - Upper confidence bounds
         
         Parameters
         ----------
@@ -158,12 +180,16 @@ class PIONEER:
             Tuple containing:
             - Selected sequences of shape (M, A, L)
             - Selection indices of shape (M,)
-            where M is determined by the acquisition function
+            where M is determined by the acquisition function's strategy
         """
         return self.acquisition(x)
 
     def get_oracle_labels(self, x:torch.Tensor) -> torch.Tensor:
         """Get ground truth labels from oracle.
+        
+        Queries the oracle (e.g. experimental assay or trusted model) to obtain
+        ground truth labels for the input sequences. The oracle provides the true
+        target values that the surrogate model aims to predict.
         
         Parameters
         ----------
@@ -189,6 +215,9 @@ class PIONEER:
         2. Generates candidate sequences
         3. Selects promising candidates
         4. Gets oracle labels for selected sequences
+        
+        This is the main method that ties together all components to iteratively
+        improve sequence design through active learning.
         
         Parameters
         ----------
@@ -241,6 +270,9 @@ class PIONEER:
     def _get_dataloader(self, x:torch.Tensor, y:torch.Tensor) -> torch.utils.data.DataLoader:
         """Create DataLoader from input tensors.
         
+        Utility method to wrap input tensors in a DataLoader for batch processing.
+        Handles data shuffling and multi-processing loading.
+        
         Parameters
         ----------
         x : torch.Tensor
@@ -251,7 +283,8 @@ class PIONEER:
         Returns
         -------
         torch.utils.data.DataLoader
-            DataLoader wrapping the input tensors
+            DataLoader wrapping the input tensors with configured batch size
+            and number of workers
             
         Raises
         ------
@@ -268,6 +301,9 @@ class PIONEER:
     def save_weights(model:ModelWrapper, path:str, cycle:Optional[int]=None):
         """Save model weights to file.
         
+        Utility method to save model weights with optional cycle number in filename.
+        Useful for tracking model evolution across active learning cycles.
+        
         Parameters
         ----------
         model : pioneer.surrogate.ModelWrapper
@@ -281,6 +317,9 @@ class PIONEER:
             
         Examples
         --------
+        >>> # Save weights without cycle number
+        >>> PIONEER.save_weights(model, "model_weights.pt")
+        >>> # Save weights with cycle number
         >>> PIONEER.save_weights(model, "model_weights.pt", cycle=5)
         # Saves to "model_weights_cycle5.pt"
         """

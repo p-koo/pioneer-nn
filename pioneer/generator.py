@@ -11,7 +11,7 @@ class Generator(Proposer):
     """Abstract base class for sequence generators.
     
     All generator classes should inherit from this class and implement
-    the __call__ method.
+    the __call__ method to generate modified sequences from input sequences.
     """
     def __call__(self, x):
         """Generate modified sequences from input sequences.
@@ -21,7 +21,7 @@ class Generator(Proposer):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
@@ -34,19 +34,27 @@ class Generator(Proposer):
 class RandomGenerator(Generator):
     """Generator that creates random sequences based on nucleotide probabilities.
     
+    This class generates random sequences by sampling nucleotides according to specified
+    probabilities. Can optionally restrict mutations to a specific sequence window.
+    
     Parameters
     ----------
     prob : list[float], optional
-        Probabilities for each nucleotide, by default [0.25, 0.25, 0.25, 0.25]
+        Probabilities for each nucleotide, must sum to 1.0, by default [0.25, 0.25, 0.25, 0.25]
     seed : int, optional
-        Random seed for reproducibility, by default None
+        Random seed for reproducible sequence generation, by default None
     mut_window : tuple[int, int], optional
-        Start and end positions for mutation window.
+        Start and end positions defining mutation window.
         If None, generates random sequences for entire length, by default None
         
     Examples
     --------
+    >>> # Generate sequences with biased nucleotide probabilities
     >>> gen = RandomGenerator(prob=[0.3, 0.2, 0.2, 0.3])
+    >>> random_seqs = gen(sequences)
+    
+    >>> # Generate sequences with mutations only in positions 10-20
+    >>> gen = RandomGenerator(mut_window=(10,20))
     >>> random_seqs = gen(sequences)
     """
     def __init__(self, prob: Union[list[float], None] = None, seed: Union[int, None] = None, 
@@ -71,15 +79,15 @@ class RandomGenerator(Generator):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Random sequences with same shape as input, where sequences are randomly
-            generated within the mutation window (if specified) according to the
-            nucleotide probabilities
+            Random sequences with same shape as input. Within the mutation window
+            (if specified), nucleotides are randomly sampled according to self.prob.
+            Outside the window, sequences remain unchanged.
         """
         if self.mut_window is None:
             start = 0
@@ -104,22 +112,31 @@ class RandomGenerator(Generator):
 class MutagenesisGenerator(Generator):
     """Generator that randomly mutates sequences within a specified window.
     
+    This class implements random mutagenesis by selecting positions at random and
+    mutating them to different nucleotides. The mutation rate controls what fraction
+    of positions are mutated.
+    
     Parameters
     ----------
     mut_rate : float
-        Mutation rate between 0 and 1, representing fraction of positions to mutate
+        Mutation rate between 0 and 1, specifying fraction of positions to mutate
     mut_window : tuple[int, int], optional
-        Start and end positions for mutation window.
-        If None, mutates entire sequence, by default None
+        Start and end positions defining mutation window.
+        If None, mutations can occur anywhere in sequence, by default None
     seed : int, optional
-        Random seed for reproducibility, by default None
+        Random seed for reproducible mutations, by default None
     batch_size : int, optional
-        Batch size for processing. Decrease this value if running into 
-        GPU memory issues, by default 32
+        Batch size for processing sequences. Lower values use less GPU memory
+        but may be slower, by default 32
             
     Examples
     --------
-    >>> gen = MutagenesisGenerator(mut_rate=0.1, mut_window=(10, 20))
+    >>> # Mutate 10% of positions randomly
+    >>> gen = MutagenesisGenerator(mut_rate=0.1)
+    >>> mutated = gen(sequences)
+    
+    >>> # Mutate 20% of positions between indices 10-20
+    >>> gen = MutagenesisGenerator(mut_rate=0.2, mut_window=(10,20))
     >>> mutated = gen(sequences)
     """
     def __init__(self, mut_rate: float = 0.1, 
@@ -142,14 +159,15 @@ class MutagenesisGenerator(Generator):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
         -------
         torch.Tensor
-            Mutated sequences with same shape as input, where mut_rate fraction of positions
-            within the mutation window (if specified) are randomly mutated to different nucleotides
+            Mutated sequences with same shape as input. Within the mutation window
+            (if specified), mut_rate fraction of positions are randomly mutated to
+            different nucleotides. Outside the window, sequences remain unchanged.
         """
         N_total, A, L = x.shape
 
@@ -187,29 +205,42 @@ class MutagenesisGenerator(Generator):
 class GuidedMutagenesisGenerator(Generator):
     """Generator that uses attribution scores to guide mutations.
     
+    This class implements guided mutagenesis by using attribution scores to determine
+    which positions and nucleotides are most important for the model's predictions.
+    The temperature parameter controls how strictly the mutations follow the attribution
+    scores versus random sampling.
+    
     Parameters
     ----------
     attr_method : callable
-        Method that returns attribution scores for sequences, indicating which positions
-        and nucleotides are most important for the model's predictions
+        Method that computes attribution scores for sequences. Should return scores
+        indicating importance of each position and nucleotide.
     mut_rate : float
-        Mutation rate between 0 and 1, representing fraction of positions to mutate
+        Mutation rate between 0 and 1, specifying fraction of positions to mutate
     mut_window : tuple[int, int], optional
-        Start and end positions for mutation window.
-        If None, mutates entire sequence, by default None
+        Start and end positions defining mutation window.
+        If None, mutations can occur anywhere in sequence, by default None
     temp : float or str, optional
-        Temperature for softmax. Use 'neg_inf' for deterministic selection 
-        or positive float for sampling. Higher values make selection more random,
-        by default -1
+        Temperature for softmax sampling:
+        - 'neg_inf' or negative values: deterministic selection of highest scores
+        - positive values: sample proportional to scores, higher = more random
+        By default -1 (deterministic)
     seed : int, optional
-        Random seed for reproducibility, by default None
+        Random seed for reproducible mutations, by default None
     batch_size : int, optional
-        Batch size for processing. Decrease if running into memory issues, by default 32
+        Batch size for processing sequences. Lower values use less GPU memory
+        but may be slower, by default 32
     dont_repeat_positions : bool, optional
-        If True, prevents mutating the same position multiple times, by default True
+        If True, prevents mutating the same position multiple times in a sequence,
+        by default True
             
     Examples
     --------
+    >>> # Deterministic mutations guided by attribution scores
+    >>> gen = GuidedMutagenesisGenerator(attr_method, mut_rate=0.1)
+    >>> guided_mutations = gen(sequences)
+    
+    >>> # Probabilistic mutations with temperature=1.0
     >>> gen = GuidedMutagenesisGenerator(attr_method, mut_rate=0.1, temp=1.0)
     >>> guided_mutations = gen(sequences)
     """
@@ -237,16 +268,18 @@ class GuidedMutagenesisGenerator(Generator):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
                 
         Returns
         -------
         torch.Tensor
-            Mutated sequences with same shape as input, where mutations are guided by
-            attribution scores. The probability of mutation at each position is determined
-            by the attribution scores and temperature parameter. Higher attribution scores
-            and lower temperatures lead to more targeted mutations.
+            Mutated sequences with same shape as input. Within the mutation window
+            (if specified), positions are selected for mutation based on attribution
+            scores and temperature parameter:
+            - Low temperature: Mutations target highest attribution scores
+            - High temperature: More random selection weighted by scores
+            Outside the window, sequences remain unchanged.
         """
         
 
@@ -328,20 +361,34 @@ class GuidedMutagenesisGenerator(Generator):
 class PoolBasedGenerator(Generator):
     """Generator that selects sequences from a pre-defined pool.
     
-    This generator uses an acquisition function or selector to choose sequences from
-    a pool of candidates, optionally excluding sequences that are already in the 
-    training data.
+    This class implements sequence generation by selecting sequences from a pool of
+    candidates using an acquisition function or selector. Can optionally exclude
+    sequences that are already present in the training data.
     
     Parameters
     ----------
-    selector : Union[Acquisition, Callable[[torch.Tensor], torch.Tensor]]
-        Function or Acquisition object that selects sequences from the pool
+    selector : Union[pioneer.acquisition.Acquisition, Callable[[torch.Tensor], torch.Tensor]]
+        Acquisition function or callable that selects sequences from the pool.
+        Should return selected sequences and their indices.
     pool : torch.Tensor
         Pool of candidate sequences in one-hot encoding of shape (N, A, L)
     prior_idx : Optional[torch.Tensor], optional
-        Tensor of indices mapping pool sequences to training data, by default None
+        Indices mapping pool sequences to training data sequences. Used to exclude
+        training sequences from selection, by default None
     check_prior_idx : bool, optional
-        Whether to verify prior indices match training data, by default True
+        Whether to verify prior_idx correctly maps pool sequences to training data.
+        Only used if prior_idx is provided, by default True
+        
+    Examples
+    --------
+    >>> # Select sequences using uncertainty acquisition
+    >>> selector = UncertaintyAcquisition(n_select=10)
+    >>> gen = PoolBasedGenerator(selector, sequence_pool)
+    >>> selected = gen(sequences)
+    
+    >>> # Select excluding training sequences
+    >>> gen = PoolBasedGenerator(selector, sequence_pool, prior_idx=train_idx)
+    >>> selected = gen(sequences)
     """
     def __init__(self, selector:Union[Acquisition,Callable[[torch.Tensor],torch.Tensor]], 
                  pool:torch.Tensor,
@@ -361,7 +408,7 @@ class PoolBasedGenerator(Generator):
         x : torch.Tensor
             Training sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             
         Returns
@@ -374,6 +421,7 @@ class PoolBasedGenerator(Generator):
         ------
         AssertionError
             If prior_idx does not correctly map pool sequences to training sequences
+            when check_prior_idx is True
         """
         if self.check_prior_idx:
             prior_sort_mask = torch.argsort(self.prior_idx)
@@ -395,15 +443,16 @@ class PoolBasedGenerator(Generator):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
             Used to filter pool if prior_idx is provided
             
         Returns
         -------
         torch.Tensor
-            Selected sequences from the pool, chosen by the selector function
-            after filtering out training sequences if prior_idx is provided
+            Selected sequences from the pool, chosen by the selector function.
+            If prior_idx is provided, excludes sequences present in x from selection.
+            Shape matches selector output.
         """
         if self.prior_idx is not None:
             pool_idxs,clean_pool = self.clean_pool_idx(x)

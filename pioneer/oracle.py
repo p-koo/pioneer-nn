@@ -16,7 +16,7 @@ class Oracle:
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
             Batch size for processing, by default 32
@@ -24,8 +24,8 @@ class Oracle:
         Returns
         -------
         torch.Tensor
-            Ground truth labels of shape (N,) for single task
-            or (N, T) for T tasks
+            Ground truth labels of shape (N,1) for single task
+            or (N,T) for T tasks
         """
         raise NotImplementedError
 
@@ -45,7 +45,7 @@ class SingleOracle(Oracle):
         Arguments to initialize the model
     weight_path : str
         Path to model weights file
-    predictor : Predictor
+    predictor : pioneer.predictor.Predictor
         Prediction method for generating outputs
     device : str, optional
         Device to run model on ('cuda' or 'cpu').
@@ -92,7 +92,7 @@ class SingleOracle(Oracle):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
             Batch size for processing. Decrease if running into 
@@ -101,8 +101,8 @@ class SingleOracle(Oracle):
         Returns
         -------
         torch.Tensor
-            Model predictions of shape (N, 1) for single task
-            or (N, T) for T tasks
+            Model predictions of shape (N,1) for single task
+            or (N,T) for T tasks
         """
         predictions = []
         
@@ -139,7 +139,7 @@ class EnsembleOracle(Oracle):
         Arguments to initialize each model
     weight_paths : list[str]
         Paths to model weight files
-    predictor : Predictor
+    predictor : pioneer.predictor.Predictor
         Prediction method for generating outputs
     device : str, optional
         Device to run models on ('cuda' or 'cpu').
@@ -193,7 +193,7 @@ class EnsembleOracle(Oracle):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
             Batch size for processing. Decrease if running into 
@@ -240,7 +240,7 @@ class EnsembleOracle(Oracle):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
             Batch size for processing. Decrease if running into 
@@ -249,8 +249,8 @@ class EnsembleOracle(Oracle):
         Returns
         -------
         torch.Tensor
-            Mean predictions across ensemble of shape (N, 1) for single task
-            or (N, T) for T tasks
+            Mean predictions across ensemble of shape (N,1) for single task
+            or (N,T) for T tasks
         """
         predictions = self.full_predict(x, batch_size).mean(dim=0)
         if predictions.ndim == 1:
@@ -270,7 +270,7 @@ class EnsembleOracle(Oracle):
         x : torch.Tensor
             Input sequences of shape (N, A, L) where:
             N is batch size,
-            A is alphabet size,
+            A is alphabet size (e.g. 4 for DNA),
             L is sequence length
         batch_size : int, optional
             Batch size for processing. Decrease if running into 
@@ -279,10 +279,10 @@ class EnsembleOracle(Oracle):
         Returns
         -------
         tuple[torch.Tensor, torch.Tensor]
-            - Mean predictions across ensemble of shape (N, 1) for single task
-              or (N, T) for T tasks
-            - Standard deviations across ensemble of shape (N, 1) for single task
-              or (N, T) for T tasks, representing prediction uncertainty
+            - Mean predictions across ensemble of shape (N,1) for single task
+              or (N,T) for T tasks
+            - Standard deviations across ensemble of shape (N,1) for single task
+              or (N,T) for T tasks, representing prediction uncertainty
         """
         predictions = self.full_predict(x, batch_size)
         means = predictions.mean(dim=0)
