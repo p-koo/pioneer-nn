@@ -99,7 +99,7 @@ def test_deep_ensemble(sample_data, n_models, model_variance):
     uncertainty = DeepEnsemble()
     
     # Get uncertainty estimates
-    uncertainties = uncertainty(models, sample_data)
+    uncertainties = uncertainty(models.models, sample_data)
     
     # Test output shape
     assert uncertainties.shape == (N,), "Uncertainty shape mismatch"
@@ -113,8 +113,8 @@ def test_deep_ensemble(sample_data, n_models, model_variance):
         models_low = MockEnsembleModel(A=A, L=L, n_models=n_models, variance=0.01).to(device)
         models_high = MockEnsembleModel(A=A, L=L, n_models=n_models, variance=1.0).to(device)
         
-        uncertainties_low = uncertainty(models_low, sample_data)
-        uncertainties_high = uncertainty(models_high, sample_data)
+        uncertainties_low = uncertainty(models_low.models, sample_data)
+        uncertainties_high = uncertainty(models_high.models, sample_data)
         
         assert uncertainties_low.mean() < uncertainties_high.mean(), "Higher model variance should lead to higher uncertainty"
 

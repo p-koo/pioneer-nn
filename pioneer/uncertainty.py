@@ -100,7 +100,7 @@ class DeepEnsemble(UncertaintyMethod):
     def __init__(self):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         
-    def __call__(self, model: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, models: torch.nn.Module, x: torch.Tensor) -> torch.Tensor:
         """Generate uncertainty estimates using model ensemble.
         
         Parameters
@@ -119,13 +119,13 @@ class DeepEnsemble(UncertaintyMethod):
             Uncertainty scores of shape (N,) for single task
             or (N, T) for T tasks
         """
-        [model.eval() for model in model.models]
+        [model.eval() for model in models]
 
         x = x.to(self.device)
                 
         # Get predictions from all models
         preds = torch.stack([
-            model(x) for model in model.models
+            model(x) for model in models
         ])
                 
         # Calculate uncertainty and move to CPU
