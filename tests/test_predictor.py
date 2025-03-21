@@ -1,8 +1,8 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from predictor import Scalar, Profile
+sys.path.append('./')
+from pioneer.predictor import Scalar, Profile
 
 @pytest.fixture(params=[
     (10, 4, 100),  # original size

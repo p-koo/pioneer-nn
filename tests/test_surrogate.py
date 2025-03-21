@@ -1,10 +1,10 @@
 import torch
 import pytest
 import sys
-sys.path.append('./pioneer')
-from surrogate import ModelWrapper
-from predictor import Scalar
-from uncertainty import MCDropout, DeepEnsemble
+sys.path.append('./')
+from pioneer.surrogate import ModelWrapper
+from pioneer.predictor import Scalar
+from pioneer.uncertainty import MCDropout, DeepEnsemble
 
 @pytest.fixture(params=[
     (10, 4, 100),  # original size
