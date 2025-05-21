@@ -3,11 +3,10 @@ import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 from typing import Callable, Union, Optional
 
-from pioneer.proposer import Proposer
 from pioneer.acquisition import Acquisition
 
 
-class Generator(Proposer):
+class Generator():
     """Abstract base class for sequence generators.
     
     All generator classes should inherit from this class and implement

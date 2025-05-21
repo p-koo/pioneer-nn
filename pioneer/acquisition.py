@@ -1,9 +1,8 @@
 import torch
 from typing import Callable, Union, Optional
 from torch.utils.data import TensorDataset, DataLoader
-from pioneer.proposer import Proposer
 
-class Acquisition(Proposer):
+class Acquisition():
     """Abstract base class for sequence acquisition.
     
     All acquisition classes should inherit from this class and implement
